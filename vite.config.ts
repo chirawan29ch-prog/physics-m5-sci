@@ -3,5 +3,5 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  base: '/physics-m5-new/',
+  base: '/physics-m5-sci/',
 })
