@@ -652,9 +652,9 @@ function LoginScreen({students,onLogin}){
           <div style={{display:"flex",gap:14,justifyContent:"center",fontSize:52,marginBottom:12,animation:"float 3s ease-in-out infinite"}}>
             <span>⚡</span><span>🔥</span><span>💧</span>
           </div>
-          <div className="cond" style={{fontSize:56,fontWeight:900,letterSpacing:6,color:"var(--gold2)",lineHeight:1,textShadow:"0 0 40px rgba(232,188,85,.6)"}}>PHYSICS</div>
-          <div className="cond" style={{fontSize:22,fontWeight:600,letterSpacing:14,color:"var(--muted2)",marginTop:2}}>BATTLEGROUND</div>
-          <div className="mono" style={{fontSize:11,color:"var(--muted)",marginTop:8,letterSpacing:3}}>── QUANTUM SEASON 2568 ──</div>
+          <div className="cond" style={{fontSize:56,fontWeight:900,letterSpacing:6,color:"var(--gold2)",lineHeight:1,textShadow:"0 0 40px rgba(232,188,85,.6)"}}>SCISCORE</div>
+          <div className="cond" style={{fontSize:22,fontWeight:600,letterSpacing:14,color:"var(--muted2)",marginTop:2}}>ARENA</div>
+          <div className="mono" style={{fontSize:11,color:"var(--muted)",marginTop:8,letterSpacing:3}}>── PHYSICAL SCIENCE · 2569 ──</div>
           {SETTINGS.subject&&<div style={{fontSize:22,fontWeight:700,marginTop:14,color:"var(--gold2)",textShadow:"0 0 20px rgba(0,0,0,.35)"}}>📘 {SETTINGS.subject}</div>}
           {SETTINGS.termLabel&&SETTINGS.subject&&<div style={{fontSize:13,color:"var(--muted2)",marginTop:2}}>{SETTINGS.termLabel}</div>}
         </div>
@@ -699,7 +699,7 @@ function LoginScreen({students,onLogin}){
             <button className="btn btn-gold" onClick={doLogin} style={{marginTop:4}}>▶  DEPLOY INTO ZONE</button>
           </div>
           <div style={{height:1,background:"var(--border)",margin:"14px 0"}}/>
-          <div className="mono" style={{fontSize:10,color:"var(--muted)",textAlign:"center",letterSpacing:1}}>PHYSICS BATTLEGROUND © 2568 · QUANTUM EDITION</div>
+          <div className="mono" style={{fontSize:10,color:"var(--muted)",textAlign:"center",letterSpacing:1}}>SCISCORE ARENA © 2569 · ม.5/2–5/3</div>
         </div>
       </div>
     </div>
@@ -717,7 +717,7 @@ function TopNav({user,role,page,setPage,onLogout,assignments,studentsLoadOk}){
     <div style={{position:"sticky",top:0,zIndex:100,background:"rgba(12,24,42,.96)",backdropFilter:"blur(20px)",borderBottom:"1px solid var(--border)"}}>
       <div style={{maxWidth:1200,margin:"0 auto",padding:"8px 16px"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
-          <div className="cond" style={{fontSize:"clamp(16px,4vw,20px)",fontWeight:900,color:"var(--gold)",letterSpacing:2,flexShrink:0,whiteSpace:"nowrap",textShadow:"0 0 18px rgba(232,188,85,.5)"}}>⚡ PHYS·BG</div>
+          <div className="cond" style={{fontSize:"clamp(16px,4vw,20px)",fontWeight:900,color:"var(--gold)",letterSpacing:2,flexShrink:0,whiteSpace:"nowrap",textShadow:"0 0 18px rgba(232,188,85,.5)"}}>⚡ SCISCORE</div>
           <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
             {role==="teacher"&&(
               <span title={studentsLoadOk?"เชื่อมต่อฐานข้อมูลสำเร็จ — บันทึกได้ตามปกติ":"⚠️ ยังไม่ได้เชื่อมต่อข้อมูลนักเรียนจริง — การแก้ไขใดๆ ตอนนี้จะไม่ถูกบันทึก! ลองรีเฟรชหน้าใหม่"}
@@ -3829,6 +3829,8 @@ function TeacherAirdrop({students,setPendingAirdrop,setStudents,studentsLoadOk})
 // GOOGLE APPS SCRIPT API — แก้ไขแล้ว
 // ─────────────────────────────────────────────
 const GAS_URL = "https://script.google.com/macros/s/AKfycbxj5pX-hG9TXWzKunMHdwrkWu45byORy6yTsYoe8ishFq31YCL848supivUo9BpT1BA/exec";
+// ชื่อบนแท็บเบราว์เซอร์
+if(typeof document!=="undefined")document.title="SciScore Arena";
 // ─────────────────────────────────────────────
 // ระบบหลายเทอม — แต่ละเทอมมีข้อมูลครบชุดของตัวเอง (นักเรียน/งาน/ไฟล์) ไม่ปะปนกัน
 // ใช้ร่วมกันทุกห้อง (ต่างกันแค่ ROOM_ID / ROOM_LABEL)
