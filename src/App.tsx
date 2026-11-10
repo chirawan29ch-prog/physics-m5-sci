@@ -74,11 +74,39 @@ select.input option{background:#1e3454}
 // CONSTANTS
 // ─────────────────────────────────────────────
 const CHAPTERS = [
-  {id:"CH1",label:"บทที่ 1",title:"การเคลื่อนที่แบบฮาร์มอนิกอย่างง่าย",icon:"🔄",color:"#4ecaae",bg:"rgba(78,202,174,.06)"},
-  {id:"CH2",label:"บทที่ 2",title:"คลื่น",icon:"🌊",color:"#e88c4a",bg:"rgba(232,140,74,.06)"},
-  {id:"CH3",label:"บทที่ 3",title:"แสงเชิงคลื่น",icon:"✨",color:"#aa8ff0",bg:"rgba(170,143,240,.06)"},
-  {id:"CH4",label:"บทที่ 4",title:"แสงเชิงรังสี",icon:"☀️",color:"#f5cc70",bg:"rgba(245,204,112,.06)"},
+  {id:"CH1",label:"หน่วยที่ 1",title:"หน่วยการเรียนรู้ที่ 1 (รอตั้งชื่อ)",icon:"⚡",color:"#4ecaae",bg:"rgba(78,202,174,.06)"},
+  {id:"CH2",label:"หน่วยที่ 2",title:"หน่วยการเรียนรู้ที่ 2 (รอตั้งชื่อ)",icon:"🔥",color:"#e88c4a",bg:"rgba(232,140,74,.06)"},
+  {id:"CH3",label:"หน่วยที่ 3",title:"หน่วยการเรียนรู้ที่ 3 (รอตั้งชื่อ)",icon:"💧",color:"#aa8ff0",bg:"rgba(170,143,240,.06)"},
 ];
+// ห้องเรียนในระบบนี้ (ม.5/2 รวมทุกแผนการเรียน 5/2.1–5/2.3 เป็นห้องเดียว / ม.5/3 เช่นกัน)
+const ROOMS = [
+  {id:"r1",label:"ม.5/2",color:"#f5cc70"},
+  {id:"r2",label:"ม.5/3",color:"#7de8d0"},
+];
+const roomLabelOf=(id:string)=>(ROOMS.find((r:any)=>r.id===id)||{label:""}).label;
+// เรียงรายชื่อ: ห้อง → เลขที่ → (ถ้ายังไม่มีเลขที่) เลขประจำตัว
+function rollCmp(a:any,b:any){
+  const ra=ROOMS.findIndex((r:any)=>r.id===a.room), rb=ROOMS.findIndex((r:any)=>r.id===b.room);
+  if(ra!==rb)return (ra<0?99:ra)-(rb<0?99:rb);
+  const na=a.rollNo!=null&&a.rollNo!==""?Number(a.rollNo):9999;
+  const nb=b.rollNo!=null&&b.rollNo!==""?Number(b.rollNo):9999;
+  if(na!==nb)return na-nb;
+  return Number(a.password||0)-Number(b.password||0);
+}
+// ปุ่มเลือกห้อง (ใช้ในหน้าครู)
+function RoomFilter({value,onChange}:any){
+  return(
+    <div className="no-print" style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+      {[{id:"all",label:"ทุกห้อง"},...ROOMS].map((r:any)=>(
+        <button key={r.id} onClick={()=>onChange(r.id)} className="btn"
+          style={{background:value===r.id?"rgba(232,188,85,.18)":"rgba(255,255,255,.04)",
+            border:`1px solid ${value===r.id?"rgba(232,188,85,.6)":"var(--border)"}`,
+            color:value===r.id?"var(--gold)":"var(--muted2)",borderRadius:8,padding:"8px 16px",
+            fontSize:13,fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700}}>{r.id==="all"?"🏫 ":"📍 "}{r.label}</button>
+      ))}
+    </div>
+  );
+}
 
 const XP_RANKS = [
   {minXP:2000,maxXP:2500,label:"DIAMOND",  grade:"4",  color:"#a8d8ff",icon:"💎",desc:"ดีเยี่ยม",  scoreRange:"80–100"},
@@ -90,6 +118,22 @@ const XP_RANKS = [
   {minXP:1250,maxXP:1374,label:"BRONZE II",grade:"1",  color:"#ff9840",icon:"🥉",desc:"อ่อนมาก",   scoreRange:"50–54"},
   {minXP:0,   maxXP:1249,label:"IRON",     grade:"0",  color:"#9aacbf",icon:"⚙️",desc:"ไม่ผ่าน",   scoreRange:"0–49"},
 ];
+// ── เกรดสรุปที่ครูตั้งเองได้ (ร/มส/0-4) — ครอบค่าที่คำนวณอัตโนมัติได้ทุกจุดที่โชว์เกรดในเว็บ ──
+// เก็บที่ student.gradeOverride: null = ใช้ค่าคำนวณอัตโนมัติตามปกติ, ไม่งั้นใช้ค่าที่ครูตั้งแทนเสมอ
+const GRADE_ORDER=["ร","มส","0","1","1.5","2","2.5","3","3.5","4"];
+const GRADE_ORDER_COLORS=["#eab308","#dc2626","#f87171","#fb923c","#fbbf24","#34d399","#60a5fa","#f472b6","#818cf8","#a78bfa"];
+function overrideMeta(g:string){
+  if(g==="ร")return{color:"#eab308",icon:"⏳"};
+  if(g==="มส")return{color:"#dc2626",icon:"🚫"};
+  const found=XP_RANKS.find(r=>r.grade===g);
+  return found?{color:found.color,icon:found.icon}:{color:"var(--muted)",icon:"—"};
+}
+// เกรด Rank/XP ที่ "ใช้จริง" ทั้งเว็บ — ถ้าครูตั้งเกรดเอง ใช้ค่านั้นเสมอ ไม่งั้นคำนวณจาก XP ตามปกติ
+function finalGradeRank(student:any,assignments:any){
+  if(student?.gradeOverride)return student.gradeOverride;
+  return getRank(getEffectiveXP(student,assignments)).grade;
+}
+function isFailGrade(g:string|null){return g==="0"||g==="ร"||g==="มส";}
 let MAX_XP = 2500;
 
 const AIRDROP_POOL = [
@@ -115,33 +159,70 @@ function getRank(xp){return XP_RANKS.find(r=>xp>=r.minXP)||XP_RANKS[XP_RANKS.len
 // MOCK DATA
 // ─────────────────────────────────────────────
 const INIT_ASSIGNMENTS = [
-  {id:"A1",chapterId:"CH1",title:"ใบกิจกรรม 1.1: การเคลื่อนที่แบบ SHM",xp:300,due:"30 พ.ค. 2568",desc:"คำนวณแรงดัน กระแส ความต้านทาน",type:"worksheet",phase:"before",createdAt:"20 พ.ค. 2568"},
-  {id:"A2",chapterId:"CH1",title:"แบบทดสอบ 1.2: พลังงานใน SHM",xp:400,due:"5 มิ.ย. 2568",desc:"30 ข้อ multiple choice",type:"quiz",phase:"before",createdAt:"20 พ.ค. 2568"},
-  {id:"A3",chapterId:"CH2",title:"ใบกิจกรรม 2.1: สมบัติของคลื่น",xp:350,due:"12 มิ.ย. 2568",desc:"ทดลองสนามแม่เหล็ก",type:"lab",phase:"before",createdAt:"20 พ.ค. 2568"},
-  {id:"A4",chapterId:"CH2",title:"แบบทดสอบ 2.2: คลื่นเสียง",xp:300,due:"18 มิ.ย. 2568",desc:"Boyle's & Charles' Law",type:"worksheet",phase:"before",createdAt:"21 พ.ค. 2568"},
-  {id:"A5",chapterId:"CH3",title:"ใบกิจกรรม 3.1: การแทรกสอดของแสง",xp:400,due:"24 มิ.ย. 2568",desc:"30 ข้อ multiple choice",type:"quiz",phase:"before",createdAt:"21 พ.ค. 2568"},
-  {id:"A6",chapterId:"CH3",title:"Lab 3.2: การเลี้ยวเบนของแสง",xp:350,due:"30 มิ.ย. 2568",desc:"หลักของอาร์คิมิดีส",type:"worksheet",phase:"before",createdAt:"22 พ.ค. 2568"},
-  {id:"A7",chapterId:"CH4",title:"ใบกิจกรรม 4.1: กฎของสเนลล์",xp:400,due:"5 ก.ค. 2568",desc:"Pascal & Bernoulli",type:"lab",phase:"before",createdAt:"22 พ.ค. 2568"},
+  {id:"A1",chapterId:"CH1",title:"ใบกิจกรรม 1.1: กฎของโอห์ม",xp:300,due:"30 พ.ค. 2568",desc:"คำนวณแรงดัน กระแส ความต้านทาน",type:"worksheet",phase:"before",createdAt:"20 พ.ค. 2568"},
+  {id:"A2",chapterId:"CH1",title:"แบบทดสอบ 1.2: วงจรไฟฟ้า",xp:400,due:"5 มิ.ย. 2568",desc:"30 ข้อ multiple choice",type:"quiz",phase:"before",createdAt:"20 พ.ค. 2568"},
+  {id:"A3",chapterId:"CH1",title:"Lab 1.3: แม่เหล็กไฟฟ้า",xp:350,due:"12 มิ.ย. 2568",desc:"ทดลองสนามแม่เหล็ก",type:"lab",phase:"before",createdAt:"20 พ.ค. 2568"},
+  {id:"A4",chapterId:"CH2",title:"ใบกิจกรรม 2.1: กฎของแก๊ส",xp:300,due:"18 มิ.ย. 2568",desc:"Boyle's & Charles' Law",type:"worksheet",phase:"before",createdAt:"21 พ.ค. 2568"},
+  {id:"A5",chapterId:"CH2",title:"แบบทดสอบ 2.2: อุณหพลศาสตร์",xp:400,due:"24 มิ.ย. 2568",desc:"30 ข้อ multiple choice",type:"quiz",phase:"before",createdAt:"21 พ.ค. 2568"},
+  {id:"A6",chapterId:"CH3",title:"ใบกิจกรรม 3.1: แรงลอยตัว",xp:350,due:"30 มิ.ย. 2568",desc:"หลักของอาร์คิมิดีส",type:"worksheet",phase:"before",createdAt:"22 พ.ค. 2568"},
+  {id:"A7",chapterId:"CH3",title:"Lab 3.2: ของไหลและความดัน",xp:400,due:"5 ก.ค. 2568",desc:"Pascal & Bernoulli",type:"lab",phase:"before",createdAt:"22 พ.ค. 2568"},
 ];
 const INIT_RESOURCES = [];
 const INIT_STUDENTS = [
-  {id:"s1",  name:"นาย พรเทพ ฉิมสวัสดิ์",       password:"18721", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
-  {id:"s2",  name:"นาย ศรัณย์ อินทร์ศรี",        password:"18728", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
-  {id:"s3",  name:"นาย ภาวสุทธิ์ สุกรี",         password:"19129", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
-  {id:"s4",  name:"นาย รัฐฐกรณ์ ชมชิด",          password:"19144", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
-  {id:"s5",  name:"นางสาว จันทร์ศุธา โพธิ์ล่าม", password:"18738", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
-  {id:"s6",  name:"นางสาว อริสรา พรายยงค์",      password:"18751", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
-  {id:"s7",  name:"นางสาว ชุตินันท์ ดุสิต",      password:"19130", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
-  {id:"s8",  name:"นางสาว ณัฐนิชา บุญวัดโพธิ์",  password:"19205", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
-  {id:"s9",  name:"นาย ศิวกร บุญภา",             password:"18795", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
-  {id:"s10", name:"นางสาว มณีนุช อาสาเสนีย์",    password:"18745", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
-  {id:"s11", name:"นางสาว บุญรักษา คำพล",        password:"18740", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
-  {id:"s12", name:"นางสาว ศิริพร ปันท่าเรือ",    password:"18747", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
-  {id:"s13", name:"นางสาว สิริธร บัวสำเริง",     password:"18749", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
-  {id:"s14", name:"นางสาว ผลิตา ศรีกุตา",        password:"19219", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
-  {id:"s15", name:"นางสาว อัญชลี เกิดอำแพง",     password:"18797", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
-  {id:"s16", name:"นางสาว ขวัญพิชชา สำรวมจิต",   password:"19124", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
-  {id:"s17", name:"นางสาว พิชชานันท์ แก้วบุบผา", password:"19126", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s1", room:"r1", rollNo:"1", name:"นาย ธีรโชติ อินธิบุตร", password:"18622", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s2", room:"r1", rollNo:"2", name:"นาย ยุทธพงษ์ โพธิ์วาส", password:"18724", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s3", room:"r1", rollNo:"3", name:"นาย ชยกร รุ่งเรือง", password:"18755", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s4", room:"r1", rollNo:"4", name:"นาย ชยางค์กูล นพเกียรติกุล", password:"18756", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s5", room:"r1", rollNo:"5", name:"นาย บดินทร์ภัทร ประวะศรี", password:"18761", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s6", room:"r1", rollNo:"6", name:"นาย อัฐวุฒิ วันฟู", password:"18775", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s7", room:"r1", rollNo:"7", name:"นาย ธนพล อุ่มสุข", password:"19195", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s8", room:"r1", rollNo:"8", name:"นาย ศุภโชค ปานชาวนา", password:"19221", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s9", room:"r1", rollNo:"9", name:"นางสาว นวลพรรณ อาจหาญ", password:"18787", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s10", room:"r1", rollNo:"10", name:"นางสาว ณธิดา ตีบนางรอง", password:"19131", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s11", room:"r1", rollNo:"11", name:"นางสาว ธนันต์ยธรญ์ พูลสุข", password:"19132", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s12", room:"r1", rollNo:"12", name:"นางสาว สุนิสา คูหาเรือง", password:"19199", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s13", room:"r1", rollNo:"13", name:"นาย นพณัฐ เจริญสุข", password:"18719", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s14", room:"r1", rollNo:"14", name:"นาย วรนิต ผาสิงห์", password:"18769", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s15", room:"r1", rollNo:"15", name:"นาย วิธวัช อรุณยมาตย์", password:"18770", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s16", room:"r1", rollNo:"16", name:"นาย วีรภัทร มัธตปะโท", password:"18772", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s17", room:"r1", rollNo:"17", name:"นาย อัญญา พิสุทธิศักดิ์กุล", password:"18774", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s18", room:"r1", rollNo:"18", name:"นางสาว ปิยะดา ม่วงเจริญ", password:"18742", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s19", room:"r1", rollNo:"19", name:"นางสาว พิชญ์นาฏ จันทร์ฉาย", password:"18743", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s20", room:"r1", rollNo:"20", name:"นางสาว พิมพ์ลภัส ม่วงเจริญ", password:"18744", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s21", room:"r1", rollNo:"21", name:"นางสาว สุภัทรา ปานนาค", password:"18792", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s22", room:"r1", rollNo:"22", name:"นางสาว อรอุมา วงศ์พรม", password:"18794", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s23", room:"r1", rollNo:"23", name:"นางสาว ณัฐริกา คชสาร", password:"18802", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s24", room:"r1", rollNo:"24", name:"นางสาว ฑิฆัมพร เที่ยงบุญ", password:"18814", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s25", room:"r1", rollNo:"25", name:"นางสาว ชญาน์นันต์ สืบพลาย", password:"18782", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r1s26", room:"r1", rollNo:"26", name:"นางสาว ชาลิสา บัวทอง", password:"18783", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s1", room:"r2", rollNo:"1", name:"นาย พีรพัฒน์ พุทประเสริฐ", password:"18723", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s2", room:"r2", rollNo:"2", name:"นาย รัฐภูมิ แสงทอง", password:"18726", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s3", room:"r2", rollNo:"3", name:"นาย สฐาพร มั่นที่สุด", password:"18729", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s4", room:"r2", rollNo:"4", name:"นาย อดุลวิทย์ สัจจชลพันธ์", password:"18734", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s5", room:"r2", rollNo:"5", name:"นาย อิทธิพันธ์ พวงพิกุล", password:"18736", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s6", room:"r2", rollNo:"6", name:"นาย อรรถพล อ่อนวิเวก", password:"18773", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s7", room:"r2", rollNo:"7", name:"นาย เทพฤทธิ์ แสวง", password:"18779", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s8", room:"r2", rollNo:"8", name:"นาย กิตติธัช วีรจรรยาพันธ์", password:"19136", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s9", room:"r2", rollNo:"9", name:"นาย จักรวาล ชัยเด่นพงษ์", password:"19138", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s10", room:"r2", rollNo:"10", name:"นาย ชยพล พูนสวัสดิ์", password:"19139", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s11", room:"r2", rollNo:"11", name:"นาย ธนกฤต มีไชยสง", password:"19140", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s12", room:"r2", rollNo:"12", name:"นาย ปาณชัย เชิดชู", password:"19143", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s13", room:"r2", rollNo:"13", name:"นาย ศรัณยวัตร หลีช่วย", password:"19146", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s14", room:"r2", rollNo:"14", name:"นาย ศราวุฒิ ศรีกันหา", password:"19147", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s15", room:"r2", rollNo:"15", name:"นาย สุรสิทธิ์ เพชรกล้า", password:"19149", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s16", room:"r2", rollNo:"16", name:"นาย ทักษ์ดนัย ชุลีเชาว์โชติ", password:"19151", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s17", room:"r2", rollNo:"17", name:"นาย อัษฎา อ่วมศิริ", password:"19193", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s18", room:"r2", rollNo:"18", name:"นางสาว รัฐชนก ประทุมแก้ว", password:"19153", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s19", room:"r2", rollNo:"19", name:"นางสาว วรรณพร สืบส่วน", password:"19154", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s20", room:"r2", rollNo:"20", name:"นางสาว วิรมณ อารีย์", password:"19155", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s21", room:"r2", rollNo:"21", name:"นางสาว สุพิตตา ปิ่นสุวรรณ", password:"19156", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s22", room:"r2", rollNo:"22", name:"นาย เคน ศรีประสม", password:"19220", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s23", room:"r2", rollNo:"23", name:"นางสาว วิณัฐชา เนินใหม่", password:"18746", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s24", room:"r2", rollNo:"24", name:"นางสาว วาณิสา บัวสุวรรณ", password:"18819", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s25", room:"r2", rollNo:"25", name:"นางสาว ชัญญมณฑ์ สุดทิม", password:"19125", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s26", room:"r2", rollNo:"26", name:"นางสาว ณัฐพร กลิ่นกลัด", password:"19127", avatar:"👩‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s27", room:"r2", rollNo:"27", name:"นาย เทพทัต มิ่งขวัญ", password:"18592", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
+  {id:"r2s28", room:"r2", rollNo:"28", name:"นาย พีรพงศ์ มูลประดิษฐ์", password:"18722", avatar:"👨‍🎓", xp:0, submissions:{}, inventory:[], midterm:null, final:null, xpLog:[]},
 ];
 
 // ─────────────────────────────────────────────
@@ -282,16 +363,19 @@ function XPBar({xp,maxXP=MAX_XP,showLabel=true}){
   );
 }
 
-function GradeTag({xp,big=false}){
+function GradeTag({xp,big=false,override}:{xp:number,big?:boolean,override?:string|null}){
   const r=getRank(xp);
+  const hasOverride=!!override;
+  const displayGrade=hasOverride?override:r.grade;
+  const meta=hasOverride?overrideMeta(override as string):{color:r.color,icon:r.icon};
   return(
     <div style={{display:"inline-flex",flexDirection:"column",alignItems:"center",
-      background:`${r.color}20`,border:`2px solid ${r.color}70`,
+      background:`${meta.color}20`,border:`2px solid ${meta.color}70`,
       borderRadius:8,padding:big?"10px 18px":"6px 12px",textAlign:"center"}}>
-      <div style={{fontSize:big?18:14}}>{r.icon}</div>
-      <div className="cond" style={{fontSize:big?38:22,fontWeight:900,color:r.color,lineHeight:1,
-        textShadow:`0 0 18px ${r.color}66`}}>{r.grade}</div>
-      <div className="mono" style={{fontSize:big?10:8,color:r.color,letterSpacing:1,marginTop:1}}>GRADE</div>
+      <div style={{fontSize:big?18:14}}>{meta.icon}</div>
+      <div className="cond" style={{fontSize:big?38:22,fontWeight:900,color:meta.color,lineHeight:1,
+        textShadow:`0 0 18px ${meta.color}66`}}>{displayGrade}</div>
+      <div className="mono" style={{fontSize:big?10:8,color:meta.color,letterSpacing:1,marginTop:1}}>GRADE</div>
     </div>
   );
 }
@@ -548,6 +632,7 @@ function AirdropPopup({airdrop,onClaim}:{airdrop:any,onClaim:()=>void}){
 // ─────────────────────────────────────────────
 function LoginScreen({students,onLogin}){
   const [mode,setMode]=useState("student");
+  const [selRoom,setSelRoom]=useState("r1");
   const [sel,setSel]=useState("");
   const [pw,setPw]=useState("");
   const [err,setErr]=useState("");
@@ -584,10 +669,20 @@ function LoginScreen({students,onLogin}){
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
             {mode==="student"?(
               <div>
+                <label className="mono" style={{fontSize:10,color:"var(--muted)",letterSpacing:2,display:"block",marginBottom:8}}>เลือกห้องเรียน</label>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+                  {ROOMS.map((r:any)=>(
+                    <button key={r.id} onClick={()=>{setSelRoom(r.id);setSel("");}} className="btn"
+                      style={{background:selRoom===r.id?`${r.color}22`:"rgba(255,255,255,.04)",
+                        border:`1px solid ${selRoom===r.id?r.color:"var(--border)"}`,
+                        color:selRoom===r.id?r.color:"var(--muted2)",borderRadius:8,padding:"10px",
+                        fontSize:15,fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,letterSpacing:1}}>📍 {r.label}</button>
+                  ))}
+                </div>
                 <label className="mono" style={{fontSize:10,color:"var(--muted)",letterSpacing:2,display:"block",marginBottom:8}}>SELECT PLAYER</label>
                 <select className="input" value={sel} onChange={e=>setSel(e.target.value)}>
                   <option value="">-- เลือกชื่อนักเรียน --</option>
-                  {students.map(s=><option key={s.id} value={s.id}>{s.avatar} {s.name}</option>)}
+                  {students.filter((s:any)=>s.room===selRoom).sort(rollCmp).map((s:any)=><option key={s.id} value={s.id}>{s.rollNo?`${s.rollNo}. `:""}{s.name}</option>)}
                 </select>
               </div>
             ):(
@@ -623,7 +718,6 @@ function TopNav({user,role,page,setPage,onLogout,assignments,studentsLoadOk}){
       <div style={{maxWidth:1200,margin:"0 auto",padding:"8px 16px"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
           <div className="cond" style={{fontSize:"clamp(16px,4vw,20px)",fontWeight:900,color:"var(--gold)",letterSpacing:2,flexShrink:0,whiteSpace:"nowrap",textShadow:"0 0 18px rgba(232,188,85,.5)"}}>⚡ PHYS·BG</div>
-          <span className="mono" title="ห้อง / วิชา / เทอมที่ระบบกำลังใช้อยู่" style={{fontSize:12,fontWeight:600,color:"var(--text)",letterSpacing:.5,flex:"1 1 auto",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ROOM_LABEL}{SETTINGS.subject?` · ${SETTINGS.subject}`:""} · {SETTINGS.termLabel}</span>
           <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
             {role==="teacher"&&(
               <span title={studentsLoadOk?"เชื่อมต่อฐานข้อมูลสำเร็จ — บันทึกได้ตามปกติ":"⚠️ ยังไม่ได้เชื่อมต่อข้อมูลนักเรียนจริง — การแก้ไขใดๆ ตอนนี้จะไม่ถูกบันทึก! ลองรีเฟรชหน้าใหม่"}
@@ -782,7 +876,13 @@ function ScoreBreakdown({student, assignments}){
 function StudentDashboard({student,students,assignments,setPage,setStudents}){
   const effXP=getEffectiveXP(student,assignments);
   const rank=getRank(effXP);
-  const submitted=Object.keys(student.submissions||{}).length;
+  // นับ "ส่งแล้ว/ค้างส่ง" อ้างอิงชุดรายการเดียวกับหน้า "ส่งงาน" เป๊ะ (รวมทั้งใบงานที่ต้องส่งไฟล์/ลิงก์ และกิจกรรมในห้องที่ครูให้ XP)
+  const allActNamesD=[...new Set((students||[]).flatMap((st:any)=>(st.xpLog||[]).map((l:any)=>l.activity)))];
+  const totalItemsD=(assignments||[]).length+allActNamesD.length;
+  const doneItemsD=(assignments||[]).filter((a:any)=>student.submissions?.[a.id]).length
+    +allActNamesD.filter((name:any)=>(student.xpLog||[]).some((l:any)=>l.activity===name)).length;
+  const submitted=doneItemsD;
+  const pendingCount=totalItemsD-doneItemsD;
   const [pwModal,setPwModal]=useState(false);
   const [oldPw,setOldPw]=useState("");const [newPw,setNewPw]=useState("");const [cnf,setCnf]=useState("");const [pwMsg,setPwMsg]=useState(null);
   function changePw(){
@@ -825,7 +925,7 @@ function StudentDashboard({student,students,assignments,setPage,setStudents}){
               <span className="badge" style={{background:"rgba(94,200,126,.14)",border:"1px solid rgba(94,200,126,.4)",color:"var(--green)"}}>✓ {submitted}/{assignments.length} งาน</span>
             </div>
           </div>
-          <GradeTag xp={effXP} big={true}/>
+          <GradeTag xp={effXP} big={true} override={student.gradeOverride}/>
         </div>
         <div style={{marginTop:20}}>
           <div className="mono" style={{fontSize:10,color:"var(--muted)",letterSpacing:2,marginBottom:8}}>PROGRESS TO VICTORY</div>
@@ -834,18 +934,18 @@ function StudentDashboard({student,students,assignments,setPage,setStudents}){
         </div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:16,marginBottom:16}}>
-        <Top3Card students={students} assignments={assignments}/>
         <div>
           <div className="card" style={{marginBottom:10,textAlign:"center",padding:14}}>
             <div className="mono" style={{fontSize:10,color:"var(--muted)",letterSpacing:2,marginBottom:6}}>YOUR XP</div>
             <div className="cond" style={{fontSize:"clamp(32px,9vw,48px)",fontWeight:900,color:rank.color,lineHeight:1}}>{effXP.toLocaleString()}</div>
-            <div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>{xpToScore(effXP)} คะแนน จาก 2,500 XP (100 คะแนน)</div>
+            <div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>{xpToScore(effXP)} / 100 คะแนน</div>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))",gap:8}}>
             <div className="card" style={{textAlign:"center",padding:12}}><div style={{fontSize:22,marginBottom:4}}>📋</div><div className="cond" style={{fontSize:28,fontWeight:700,color:"var(--cyan)"}}>{submitted}</div><div style={{fontSize:11,color:"var(--muted)"}}>ส่งแล้ว</div></div>
-            <div className="card" style={{textAlign:"center",padding:12}}><div style={{fontSize:22,marginBottom:4}}>⏳</div><div className="cond" style={{fontSize:28,fontWeight:700,color:"var(--orange)"}}>{assignments.length-submitted}</div><div style={{fontSize:11,color:"var(--muted)"}}>ค้างส่ง</div></div>
+            <div className="card" style={{textAlign:"center",padding:12}}><div style={{fontSize:22,marginBottom:4}}>⏳</div><div className="cond" style={{fontSize:28,fontWeight:700,color:"var(--orange)"}}>{pendingCount}</div><div style={{fontSize:11,color:"var(--muted)"}}>ค้างส่ง</div></div>
           </div>
         </div>
+        <Top3Card students={students} assignments={assignments}/>
       </div>
       <ScoreBreakdown student={student} assignments={assignments}/>
       <GradeTable/>
@@ -857,6 +957,19 @@ function StudentDashboard({student,students,assignments,setPage,setStudents}){
 // STUDENT: ASSIGNMENTS
 // ─────────────────────────────────────────────
 function xpToScore(xp){return Math.round((xp||0)/25);}
+// จัดสรรคะแนนต่อชิ้นด้วยวิธี Largest Remainder ให้ผลรวมคะแนนของทุกชิ้นในกลุ่ม "ตรงกับคะแนนรวม" ที่คำนวณจาก XP จริงเป๊ะเสมอ (ปัดเศษครั้งเดียวจากผลรวม) แทนที่จะปัดแยกทีละชิ้นแล้วบวกเอง ซึ่งอาจคลาดเคลื่อน ±1 ได้
+function apportionScores(xpList,capXp){
+  const totalXpRaw=xpList.reduce((a,b)=>a+(b||0),0);
+  const totalXp=capXp!=null?Math.min(capXp,totalXpRaw):totalXpRaw;
+  const target=Math.round(totalXp/25);
+  const raw=xpList.map(xp=>(xp||0)/25);
+  const floors=raw.map(r=>Math.floor(r));
+  let remaining=target-floors.reduce((a,b)=>a+b,0);
+  const order=raw.map((r,i)=>({i,rem:r-floors[i]})).sort((a,b)=>b.rem-a.rem);
+  const scores=[...floors];
+  for(let k=0;k<order.length&&remaining>0;k++){scores[order[k].i]+=1;remaining--;}
+  return scores;
+}
 
 // ── XP รวมที่ "ใช้จริง" สำหรับ Rank/แถบ XP/Leaderboard ──
 // ครอบเพดานตามสัดส่วนคะแนน 100: ก่อนกลางภาค 875(35คะแนน) + กลางภาค 375(15) + หลังกลางภาค 875(35) + ปลายภาค 375(15) = 2500
@@ -1005,6 +1118,9 @@ function StudentAssignments({student,students,assignments,setStudents,skipNextSa
       {groups.map(g=>{
         const items=allItems.filter((it:any)=>it.phase===g.phase);
         if(items.length===0)return null;
+        // คะแนนต่อชิ้นที่ "ได้จริง" จัดสรรให้ผลรวมตรงกับคะแนนรวมของช่วงนี้ (เก็บก่อน/หลังกลางภาค เต็ม 35 คะแนน) เป๊ะเสมอ
+        const earnedList=items.map((it:any)=>it.kind==="task"?(it.sub?.graded?(it.sub.xpEarned||0):0):(it.myLog?(it.myLog.xp||0):0));
+        const itemScores=apportionScores(earnedList,875);
         return(
           <div key={g.phase} style={{marginBottom:32}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,paddingBottom:10,borderBottom:`2px solid ${g.dot}50`}}>
@@ -1012,7 +1128,7 @@ function StudentAssignments({student,students,assignments,setStudents,skipNextSa
               <div className="cond" style={{fontSize:22,fontWeight:700,color:g.text,letterSpacing:1}}>{g.label}</div>
               <span className="badge" style={{background:g.tint,border:`1px solid ${g.dot}66`,color:g.text,fontSize:9}}>{items.length} รายการ</span>
             </div>
-            {items.map((it:any)=>{
+            {items.map((it:any,idx:number)=>{
               if(it.kind==="task"){
                 const a=it.a,sub=it.sub,tm=it.tm,ch=it.ch;
                 return(
@@ -1034,7 +1150,7 @@ function StudentAssignments({student,students,assignments,setStudents,skipNextSa
                           <a href={sub.file} target="_blank" rel="noreferrer" style={{color:"var(--cyan)"}}>🔗 ดูไฟล์งาน</a>}
                         <span style={{color:"var(--muted)",whiteSpace:"nowrap"}}> · {sub.submittedAt}</span>
                         {!sub.uploading&&<span style={{marginLeft:8,color:sub.graded?"var(--gold)":"var(--muted)",fontFamily:"'Share Tech Mono',monospace",fontSize:11,whiteSpace:"nowrap"}}>
-                          {sub.graded?`${sub.xpEarned} XP (${xpToScore(sub.xpEarned)} คะแนน)`:"⏳ รอครูตรวจ"}
+                          {sub.graded?`${sub.xpEarned} XP (${itemScores[idx]} คะแนน)`:"⏳ รอครูตรวจ"}
                         </span>}
                       </div>}
                     </div>
@@ -1063,7 +1179,7 @@ function StudentAssignments({student,students,assignments,setStudents,skipNextSa
                     {myLog
                       ?<div style={{fontSize:12,marginTop:4}}>
                           <span style={{color:"var(--muted)"}}>{myLog.date}</span>
-                          <span style={{marginLeft:8,color:"var(--gold)",fontFamily:"'Share Tech Mono',monospace",fontSize:11}}>{myLog.xp} XP ({xpToScore(myLog.xp)} คะแนน)</span>
+                          <span style={{marginLeft:8,color:"var(--gold)",fontFamily:"'Share Tech Mono',monospace",fontSize:11}}>{myLog.xp} XP ({itemScores[idx]} คะแนน)</span>
                         </div>
                       :<div style={{fontSize:11,color:"var(--red)",marginTop:2}}>กรุณาติดต่อครู</div>
                     }
@@ -1143,7 +1259,7 @@ function RankingPage({students,myId,isTeacher=false,assignments}){
             <div style={{textAlign:"center",flexShrink:0}}>
               <div className="cond" style={{fontSize:28,fontWeight:900,color:mc[i],whiteSpace:"nowrap"}}>{sxp.toLocaleString()}</div>
               <div style={{fontSize:10,color:"var(--muted)",whiteSpace:"nowrap"}}>XP ({xpToScore(sxp)} คะแนน)</div>
-              <GradeTag xp={sxp}/>
+              <GradeTag xp={sxp} override={s.gradeOverride}/>
             </div>
           </div>
         );})}
@@ -1166,7 +1282,7 @@ function RankingPage({students,myId,isTeacher=false,assignments}){
               <div style={{textAlign:"center",flexShrink:0}}>
                 <div className="cond" style={{fontSize:26,fontWeight:900,color:"var(--gold)",whiteSpace:"nowrap"}}>{eff(mySelf).toLocaleString()}</div>
                 <div style={{fontSize:10,color:"var(--muted)",whiteSpace:"nowrap"}}>XP ({xpToScore(eff(mySelf))} คะแนน)</div>
-                <GradeTag xp={eff(mySelf)}/>
+                <GradeTag xp={eff(mySelf)} override={mySelf.gradeOverride}/>
               </div>
             </div>
             <div style={{textAlign:"center",marginTop:12,fontSize:13,color:"var(--muted)"}}>
@@ -1194,7 +1310,7 @@ function RankingPage({students,myId,isTeacher=false,assignments}){
           <div style={{textAlign:"center",flexShrink:0}}>
             <div className="cond" style={{fontSize:26,fontWeight:900,color:r.color,whiteSpace:"nowrap"}}>{sxp.toLocaleString()}</div>
             <div style={{fontSize:10,color:"var(--muted)",whiteSpace:"nowrap"}}>XP ({xpToScore(sxp)} คะแนน)</div>
-            <GradeTag xp={sxp}/>
+            <GradeTag xp={sxp} override={s.gradeOverride}/>
           </div>
         </div>
       );})}
@@ -1326,12 +1442,12 @@ function GradeChart({students,assignments}){
   useChartJS();
   const chartRef=useRef<any>(null),pieRef=useRef(null);
   const barInst=useRef<any>(null),pieInst=useRef(null);
-  const gradeMap={"4":0,"3.5":0,"3":0,"2.5":0,"2":0,"1.5":0,"1":0,"0":0};
-  students.forEach(s=>{const r=getRank(getEffectiveXP(s,assignments));if(r.grade in gradeMap)gradeMap[r.grade]++;});
-  const labels=Object.keys(gradeMap),data=Object.values(gradeMap);
-  const colors=["#a78bfa","#818cf8","#60a5fa","#f472b6","#34d399","#fbbf24","#fb923c","#f87171"];
+  const gradeMap:any={};GRADE_ORDER.forEach(g=>gradeMap[g]=0);
+  students.forEach(s=>{const g=finalGradeRank(s,assignments);if(g in gradeMap)gradeMap[g]++;});
+  const labels=GRADE_ORDER,data=GRADE_ORDER.map(g=>gradeMap[g]);
+  const colors=GRADE_ORDER_COLORS;
   const total=students.length;
-  const passing=students.filter(s=>getRank(getEffectiveXP(s,assignments)).grade!=="0").length;
+  const passing=students.filter(s=>!isFailGrade(finalGradeRank(s,assignments))).length;
   useEffect(()=>{
     if(typeof Chart==="undefined"||!chartRef.current)return;
     if(barInst.current)barInst.current.destroy();
@@ -1344,7 +1460,7 @@ function GradeChart({students,assignments}){
     });
     const nz=labels.map((l,i)=>({l,d:data[i],c:colors[i]})).filter(x=>x.d>0);
     pieInst.current=new Chart(pieRef.current,{
-      type:"doughnut",data:{labels:nz.map(x=>"เกรด "+x.l),datasets:[{data:nz.map(x=>x.d),backgroundColor:nz.map(x=>x.c),borderWidth:3,borderColor:"rgba(10,20,38,.9)"}]},
+      type:"doughnut",data:{labels:nz.map(x=>(x.l==="ร"||x.l==="มส")?x.l:"เกรด "+x.l),datasets:[{data:nz.map(x=>x.d),backgroundColor:nz.map(x=>x.c),borderWidth:3,borderColor:"rgba(10,20,38,.9)"}]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}
     });
   },[students]);
@@ -1372,7 +1488,7 @@ function GradeChart({students,assignments}){
 // ─────────────────────────────────────────────
 function TeacherOverview({students,assignments,setPage,maxXp,onEditMaxXp}:any){
   const avgXP=Math.round(students.reduce((a,s)=>a+getEffectiveXP(s,assignments),0)/students.length);
-  const passing=students.filter(s=>parseFloat(getRank(getEffectiveXP(s,assignments)).grade)>0).length;
+  const passing=students.filter(s=>!isFailGrade(finalGradeRank(s,assignments))).length;
   // ดาวน์โหลดข้อมูลนักเรียนปัจจุบันเก็บไว้ในเครื่อง — สำรองอิสระ ไม่พึ่งอะไรฝั่งเซิร์ฟเวอร์เลย
   // ครูควรกดเก็บไว้เป็นระยะๆ โดยเฉพาะหลังให้คะแนนชุดใหญ่ๆ เผื่อไว้กู้คืนเองได้ทันทีถ้าเกิดปัญหา
   function downloadBackup(){
@@ -1445,12 +1561,44 @@ function TeacherOverview({students,assignments,setPage,maxXp,onEditMaxXp}:any){
 function TeacherStudents({students,assignments,setStudents,studentsLoadOk}){
   const [sel,setSel]=useState(null);
   useEffect(()=>{window.scrollTo(0,0);},[sel]);
-  const [editXpModal,setEditXpModal]=useState(false);
-  const [newXp,setNewXp]=useState("");
-  const [xpMsg,setXpMsg]=useState(null);
   const [editSubModal,setEditSubModal]=useState<any>(null); // {assignmentId, xpEarned, maxXp}
   const [editLogModal,setEditLogModal]=useState<any>(null); // {idx, xp, activity}
   const s=sel?students.find(x=>x.id===sel):null;
+  // ตั้ง/ล้างเกรดสรุปเอง (ร/มส/0-4) — ใช้แทนค่าคำนวณอัตโนมัติทุกจุดในเว็บทันที
+  function setGradeOverride(studentId:string,value:string|null){
+    if(!studentsLoadOk){alert("⚠️ ยังโหลดข้อมูลนักเรียนจริงจากระบบไม่สำเร็จ กรุณารีเฟรชหน้าเว็บใหม่ก่อนแก้ไข (เพื่อป้องกันข้อมูลเสียหาย)");return;}
+    setStudents((prev:any)=>prev.map((st:any)=>st.id===studentId?{...st,gradeOverride:value||null}:st));
+  }
+  // จัดการ "เลขที่" (เลขที่นั่ง/เลขในห้อง) — แยกต่างหากจากเลขประจำตัว ใช้เรียงลำดับรายงานคะแนน
+  const [rollMode,setRollMode]=useState(false);
+  function setRollNo(studentId:string,value:string){
+    if(!studentsLoadOk){alert("⚠️ ยังโหลดข้อมูลนักเรียนจริงจากระบบไม่สำเร็จ กรุณารีเฟรชหน้าเว็บใหม่ก่อนแก้ไข (เพื่อป้องกันข้อมูลเสียหาย)");return;}
+    setStudents((prev:any)=>prev.map((st:any)=>st.id===studentId?{...st,rollNo:value===""?null:value}:st));
+  }
+  // วางลิสต์เลขที่ทีเดียว (ตัดจาก Excel/Sheets มาได้ตรงๆ) — จับคู่ด้วย "เลขประจำตัว" เท่านั้น (ชื่อไม่ใช้จับคู่ เพราะเว้นวรรค/สะกดอาจไม่ตรงเป๊ะ)
+  const [pasteRoll,setPasteRoll]=useState("");
+  function applyPasteRoll(){
+    if(!studentsLoadOk){alert("⚠️ ยังโหลดข้อมูลนักเรียนจริงจากระบบไม่สำเร็จ กรุณารีเฟรชหน้าเว็บใหม่ก่อนแก้ไข (เพื่อป้องกันข้อมูลเสียหาย)");return;}
+    const lines=pasteRoll.split("\n").map(l=>l.trim()).filter(Boolean);
+    const parsed:{rollNo:string,password:string}[]=[];
+    for(const line of lines){
+      let parts=line.split(/\t+/).map(c=>c.trim()).filter(c=>c!=="");
+      if(parts.length<2)parts=line.split(/\s+/).filter(c=>c!=="");
+      if(parts.length<2)continue;
+      const[rollNo,password]=parts;
+      if(!/^\d+$/.test(rollNo)||!/^\d+$/.test(password))continue; // ข้ามแถวหัวตาราง/บรรทัดอ่านไม่ได้
+      parsed.push({rollNo,password});
+    }
+    if(parsed.length===0){alert("อ่านข้อมูลไม่ได้ครับ — ต้องมี \"เลขที่\" กับ \"เลขประจำตัว\" เป็น 2 คอลัมน์แรกของแต่ละแถว (คั่นด้วย tab หรือเว้นวรรค)");return;}
+    let matched=0;
+    setStudents((prev:any)=>prev.map((st:any)=>{
+      const found=parsed.find(p=>p.password===String(st.password));
+      if(found){matched++;return{...st,rollNo:found.rollNo};}
+      return st;
+    }));
+    setTimeout(()=>alert(`ตั้งเลขที่ให้แล้ว ${matched} คน จากทั้งหมด ${parsed.length} แถวที่วางมา${matched<parsed.length?` (อีก ${parsed.length-matched} แถวหาเลขประจำตัวที่ตรงกันในระบบไม่เจอ)`:""}`),50);
+    setPasteRoll("");
+  }
   function removeAirdrop(studentId,idx){
     if(!studentsLoadOk){alert("⚠️ ยังโหลดข้อมูลนักเรียนจริงจากระบบไม่สำเร็จ กรุณารีเฟรชหน้าเว็บใหม่ก่อนแก้ไข (เพื่อป้องกันข้อมูลเสียหาย)");return;}
     setStudents(prev=>{
@@ -1459,76 +1607,6 @@ function TeacherStudents({students,assignments,setStudents,studentsLoadOk}){
       return updated;
     });
   }
-  function saveEditXp(){
-    if(!studentsLoadOk){alert("⚠️ ยังโหลดข้อมูลนักเรียนจริงจากระบบไม่สำเร็จ กรุณารีเฟรชหน้าเว็บใหม่ก่อนแก้ไข (เพื่อป้องกันข้อมูลเสียหาย)");return;}
-    if(!s)return;
-    const val=Number(newXp);
-    if(isNaN(val)||val<0){setXpMsg({t:"err",text:"กรุณาใส่ตัวเลขที่ถูกต้อง"});return;}
-    if(!window.confirm(`แก้ไข XP ของ ${s.name} จาก ${s.xp} → ${val}?`))return;
-    setStudents((prev:any)=>{
-      const updated=prev.map((st:any)=>st.id===s.id?{...st,xp:val}:st);
-      gasSave("saveStudents",updated);
-      return updated;
-    });
-    setXpMsg({t:"ok",text:`✅ แก้ไข XP เป็น ${val} แล้ว`});
-    setTimeout(()=>{setEditXpModal(false);setXpMsg(null);setNewXp("");},1500);
-  }
-
-  function calcCorrectXp(st:any){
-    const fromSubs=Object.values(st.submissions||{}).reduce((sum:number,sub:any)=>
-      sum+(sub?.graded?(sub.xpEarned||0):0),0);
-    const fromLog=(st.xpLog||[]).reduce((sum:number,l:any)=>sum+(l.xp||0),0);
-    return fromSubs+fromLog;
-  }
-
-  function recalcXp(targetStu:any){
-    if(!studentsLoadOk){alert("⚠️ ยังโหลดข้อมูลนักเรียนจริงจากระบบไม่สำเร็จ กรุณารีเฟรชหน้าเว็บใหม่ก่อนแก้ไข (เพื่อป้องกันข้อมูลเสียหาย)");return;}
-    const correct=calcCorrectXp(targetStu);
-    const fromSubs=Object.values(targetStu.submissions||{}).reduce((sum:number,sub:any)=>
-      sum+(sub?.graded?(sub.xpEarned||0):0),0);
-    const fromLog=(targetStu.xpLog||[]).reduce((sum:number,l:any)=>sum+(l.xp||0),0);
-    const diff=correct-targetStu.xp;
-    if(diff===0){alert(`✅ XP ของ ${targetStu.name} ถูกต้องอยู่แล้ว (${correct} XP)`);return;}
-    if(!window.confirm(
-      `คำนวณ XP ใหม่ของ ${targetStu.name}
-
-`+
-      `งานส่ง (ตรวจแล้ว): ${fromSubs} XP
-`+
-      `กิจกรรม (xpLog): ${fromLog} XP
-`+
-      `รวมใหม่: ${correct} XP
-
-`+
-      `XP ปัจจุบัน: ${targetStu.xp} XP (ต่าง ${diff>0?"+":""}${diff})
-
-`+
-      `ยืนยันปรับ?`
-    ))return;
-    setStudents((prev:any)=>{
-      const updated=prev.map((st:any)=>st.id===targetStu.id?{...st,xp:correct}:st);
-      gasSave("saveStudents",updated);
-      return updated;
-    });
-  }
-
-  function recalcAllXp(){
-    if(!studentsLoadOk){alert("⚠️ ยังโหลดข้อมูลนักเรียนจริงจากระบบไม่สำเร็จ กรุณารีเฟรชหน้าเว็บใหม่ก่อนแก้ไข (เพื่อป้องกันข้อมูลเสียหาย)");return;}
-    const preview=(students as any[]).map(st=>{
-      const correct=calcCorrectXp(st);
-      return{id:st.id,name:st.name,old:st.xp,correct,diff:correct-st.xp};
-    });
-    const changed=preview.filter(s=>s.diff!==0);
-    if(changed.length===0){alert("✅ XP ทุกคนถูกต้องอยู่แล้ว!");return;}
-    const msg=changed.map(s=>"• "+s.name+": "+s.old+" → "+s.correct+" ("+(s.diff>0?"+":"")+s.diff+")").join(", ");
-    if(!window.confirm("คำนวณ XP ใหม่ทั้งห้อง รายการที่เปลี่ยน: "+msg+" ยืนยัน?"))return;
-    setStudents((prev:any)=>{
-      const updated=prev.map((st:any)=>({...st,xp:calcCorrectXp(st)}));
-      gasSave("saveStudents",updated);
-      return updated;
-    });
-  }
-
   // แก้ไข submission XP + maxXp
   function saveEditSub(){
     if(!studentsLoadOk){alert("⚠️ ยังโหลดข้อมูลนักเรียนจริงจากระบบไม่สำเร็จ กรุณารีเฟรชหน้าเว็บใหม่ก่อนแก้ไข (เพื่อป้องกันข้อมูลเสียหาย)");return;}
@@ -1581,26 +1659,6 @@ function TeacherStudents({students,assignments,setStudents,studentsLoadOk}){
   if(s)return(
     <div className="fade-up" style={{padding:20,maxWidth:900,margin:"0 auto"}}>
       <button className="btn-outline" onClick={()=>setSel(null)} style={{marginBottom:20}}>← กลับ</button>
-      {editXpModal&&(
-        <div className="overlay">
-          <div className="card card-gold" style={{width:"100%",maxWidth:420}}>
-            <div className="cond" style={{fontSize:22,color:"var(--gold)",letterSpacing:2,marginBottom:16}}>✏️ แก้ไข XP — {s.name}</div>
-            <div style={{marginBottom:6,fontSize:13,color:"var(--muted2)"}}>XP ปัจจุบัน: <span className="mono" style={{color:"var(--gold)",fontWeight:700}}>{s.xp.toLocaleString()} XP</span></div>
-            <div style={{marginBottom:16}}>
-              <label className="mono" style={{fontSize:10,color:"var(--muted)",letterSpacing:2,display:"block",marginBottom:8}}>XP ใหม่</label>
-              <input className="input" type="number" min="0" max="9999" value={newXp}
-                onChange={e=>setNewXp(e.target.value)} placeholder={String(s.xp)}
-                onKeyDown={e=>e.key==="Enter"&&saveEditXp()}/>
-              <div style={{fontSize:11,color:"var(--muted)",marginTop:6}}>⚠️ การแก้ไขนี้จะบันทึกลง Google Sheet ทันที</div>
-            </div>
-            {xpMsg&&<div style={{background:xpMsg.t==="ok"?"rgba(94,200,126,.14)":"rgba(232,96,96,.14)",border:`1px solid ${xpMsg.t==="ok"?"rgba(94,200,126,.4)":"rgba(232,96,96,.4)"}`,borderRadius:6,padding:"9px 14px",color:xpMsg.t==="ok"?"var(--green)":"var(--red)",fontSize:13,marginBottom:12}}>{xpMsg.text}</div>}
-            <div style={{display:"flex",gap:10}}>
-              <button className="btn btn-gold" onClick={saveEditXp} style={{flex:1,fontSize:15,padding:12}}>💾 บันทึก</button>
-              <button className="btn-outline" onClick={()=>{setEditXpModal(false);setXpMsg(null);setNewXp("");}} style={{flex:1}}>ยกเลิก</button>
-            </div>
-          </div>
-        </div>
-      )}
       {/* Modal แก้ไข Submission */}
       {editSubModal&&(
         <div className="overlay">
@@ -1668,17 +1726,20 @@ function TeacherStudents({students,assignments,setStudents,studentsLoadOk}){
         <div style={{display:"flex",gap:16,alignItems:"center",flexWrap:"wrap"}}>
           <div style={{fontSize:52}}>{s.avatar}</div>
           <div style={{flex:1}}><div className="cond" style={{fontSize:28,fontWeight:700,color:"#fff"}}>{s.name}</div></div>
-          <GradeTag xp={getEffectiveXP(s,assignments)} big={true}/>
+          <GradeTag xp={getEffectiveXP(s,assignments)} big={true} override={s.gradeOverride}/>
         </div>
         <div style={{marginTop:16}}><XPBar xp={getEffectiveXP(s,assignments)}/></div>
         <div style={{marginTop:10}}><ProgressFlag xp={getEffectiveXP(s,assignments)}/></div>
-        <div style={{marginTop:14,padding:"10px 14px",background:"rgba(234,179,8,.06)",border:"1px solid rgba(234,179,8,.2)",borderRadius:8,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+        <div style={{marginTop:14,padding:"10px 14px",background:"rgba(167,139,250,.06)",border:"1px solid rgba(167,139,250,.25)",borderRadius:8,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
           <div style={{flex:1,minWidth:180}}>
-            <div className="mono" style={{fontSize:9,color:"var(--muted)",letterSpacing:1}}>XP สะสมดิบ (คนละส่วนกับ Rank ด้านบน)</div>
-            <div className="mono" style={{fontSize:15,color:"#eab308",fontWeight:700}}>{s.xp.toLocaleString()} XP</div>
+            <div className="mono" style={{fontSize:9,color:"var(--muted)",letterSpacing:1}}>เกรดสรุป (ครูแก้ไขเองได้ — ใช้แทนค่าที่คำนวณอัตโนมัติทุกจุดในเว็บทันที)</div>
+            <div className="mono" style={{fontSize:13,color:s.gradeOverride?"#a78bfa":"var(--muted)",marginTop:2}}>{s.gradeOverride?`ตั้งเป็น "${s.gradeOverride}" เอง`:"อัตโนมัติตาม XP/คะแนน"}</div>
           </div>
-          <button className="btn-ghost" onClick={()=>{setNewXp(String(s.xp));setEditXpModal(true);}} style={{fontSize:12,padding:"7px 14px",borderColor:"rgba(232,96,96,.4)",color:"var(--red)"}}>✏️ แก้ XP ดิบ</button>
-          <button className="btn-ghost" onClick={()=>recalcXp(s)} style={{fontSize:12,padding:"7px 14px",borderColor:"rgba(234,179,8,.4)",color:"#eab308"}}>🔄 คำนวณดิบใหม่</button>
+          <select value={s.gradeOverride||""} onChange={e=>setGradeOverride(s.id,e.target.value||null)}
+            style={{background:"rgba(10,20,38,.8)",border:"1px solid rgba(167,139,250,.4)",color:"#a78bfa",borderRadius:6,padding:"7px 10px",fontSize:13,fontFamily:"'Share Tech Mono',monospace"}}>
+            <option value="">อัตโนมัติ</option>
+            {GRADE_ORDER.map(g=><option key={g} value={g}>{g}</option>)}
+          </select>
         </div>
       </div>
       <div className="card" style={{marginBottom:16}}>
@@ -1700,7 +1761,7 @@ function TeacherStudents({students,assignments,setStudents,studentsLoadOk}){
             </>:<span className="badge" style={{background:"rgba(232,96,96,.1)",border:"1px solid rgba(232,96,96,.25)",color:"var(--red)"}}>⏳ ยังไม่ส่ง</span>}
           </div>
         );})}</div>
-      {/* คะแนนรายส่วน — แบ่งตามแท็กก่อน/หลังกลางภาคของใบงาน/กิจกรรม */}
+      {/* คะแนนรายส่วน */}
       {(()=>{
         const xpFromAssign=(phase)=>(assignments||[]).reduce((sum,a)=>{
           if((a.phase||"before")!==phase)return sum;
@@ -1799,40 +1860,52 @@ function TeacherStudents({students,assignments,setStudents,studentsLoadOk}){
   );
   return(
     <div className="fade-up" style={{padding:20,maxWidth:900,margin:"0 auto"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+      <div style={{marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
         <div className="mono" style={{fontSize:10,color:"var(--muted)",letterSpacing:3}}>PLAYER ROSTER</div>
-        <button className="btn-ghost" onClick={recalcAllXp}
-          style={{fontSize:12,padding:"8px 16px",borderColor:"rgba(234,179,8,.4)",color:"#eab308"}}>
-          🔄 คำนวณ XP ใหม่ทั้งห้อง
+        <button className="btn-ghost" onClick={()=>setRollMode(!rollMode)} style={{fontSize:12,padding:"7px 14px",borderColor:"rgba(94,200,126,.4)",color:"var(--green)"}}>
+          {rollMode?"← กลับไปดูรายชื่อ":"📋 จัดการเลขที่"}
         </button>
       </div>
+      {rollMode?(
+        <div className="card">
+          <div style={{marginBottom:16,padding:12,background:"rgba(94,200,126,.06)",border:"1px solid rgba(94,200,126,.25)",borderRadius:8}}>
+            <div className="mono" style={{fontSize:9,color:"var(--muted)",letterSpacing:1,marginBottom:6}}>📋 วางลิสต์ทีเดียว (ตัดจาก Excel/Sheets มาได้เลย) — คอลัมน์แรกต้องเป็นเลขที่ คอลัมน์ 2 ต้องเป็นเลขประจำตัว</div>
+            <textarea value={pasteRoll} onChange={e=>setPasteRoll(e.target.value)} placeholder={"1\t18964\t...\n2\t18965\t...\n3\t18967\t..."}
+              rows={4} style={{width:"100%",background:"rgba(10,20,38,.8)",border:"1px solid rgba(94,200,126,.35)",color:"var(--text)",borderRadius:6,padding:"8px 10px",fontSize:12,fontFamily:"'Share Tech Mono',monospace",resize:"vertical"}}/>
+            <button className="btn-ghost" onClick={applyPasteRoll} style={{fontSize:12,padding:"7px 16px",marginTop:8,borderColor:"rgba(94,200,126,.5)",color:"var(--green)"}}>✅ นำเข้าเลขที่</button>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"70px 1fr 1fr",gap:0,fontSize:10,color:"var(--muted)",letterSpacing:1,padding:"0 4px 8px",borderBottom:"1px solid var(--border)",marginBottom:6}}>
+            <div>เลขที่</div><div>เลขประจำตัว</div><div>ชื่อ-สกุล</div>
+          </div>
+          {[...students].sort(rollCmp).map((s:any)=>(
+            <div key={s.id} style={{display:"grid",gridTemplateColumns:"70px 1fr 1fr",gap:0,alignItems:"center",padding:"6px 4px",borderBottom:"1px solid rgba(255,255,255,.05)"}}>
+              <input type="number" defaultValue={s.rollNo??""} placeholder="—" onBlur={e=>setRollNo(s.id,e.target.value)}
+                onKeyDown={e=>{if(e.key==="Enter")(e.target as HTMLInputElement).blur();}}
+                style={{width:56,fontSize:13,textAlign:"center",background:"rgba(10,20,38,.8)",border:"1px solid rgba(94,200,126,.4)",color:"var(--green)",borderRadius:5,padding:"5px 8px",fontFamily:"'Share Tech Mono',monospace",outline:"none"}}/>
+              <div className="mono" style={{fontSize:12,color:"var(--muted2)"}}>{s.password}</div>
+              <div style={{fontSize:13,color:"#fff"}}>{s.name} <span style={{fontSize:10,color:"var(--muted2)"}}>({roomLabelOf(s.room)})</span></div>
+            </div>
+          ))}
+          <div style={{fontSize:11,color:"var(--muted)",marginTop:12}}>💡 พิมพ์เลขที่แล้วกด Enter หรือคลิกที่อื่นเพื่อบันทึกอัตโนมัติ ใช้เรียงลำดับในรายงานคะแนนที่พิมพ์/ดาวน์โหลด</div>
+        </div>
+      ):(<>
       {[...students].sort((a:any,b:any)=>getEffectiveXP(b,assignments)-getEffectiveXP(a,assignments)).map((s:any,i:number)=>{
         const sxp=getEffectiveXP(s,assignments);const r=getRank(sxp);
-        const correct=calcCorrectXp(s);
-        const hasError=correct!==s.xp;
         return(
-        <div key={s.id} className="card card-hover slide-r" style={{display:"flex",alignItems:"center",gap:16,marginBottom:10,animationDelay:`${i*.04}s`,
-          borderColor:hasError?"rgba(239,68,68,.5)":"var(--border)"}}>
+        <div key={s.id} className="card card-hover slide-r" style={{display:"flex",alignItems:"center",gap:16,marginBottom:10,animationDelay:`${i*.04}s`}}>
           <div style={{fontSize:40,cursor:"pointer"}} onClick={()=>setSel(s.id)}>{s.avatar}</div>
           <div style={{flex:1,cursor:"pointer"}} onClick={()=>setSel(s.id)}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-              <div style={{fontSize:15,fontWeight:600,color:"#fff"}}>{s.name}</div>
-              {hasError&&<span style={{fontSize:10,background:"rgba(239,68,68,.2)",border:"1px solid rgba(239,68,68,.4)",
-                color:"#ef4444",padding:"2px 7px",borderRadius:4,fontFamily:"'Share Tech Mono',monospace"}}>
-                ⚠ XP ดิบไม่ตรง (ควรเป็น {correct})
-              </span>}
+              <div style={{fontSize:15,fontWeight:600,color:"#fff"}}>{s.name} <span className="badge" style={{fontSize:9,marginLeft:4,background:"rgba(255,255,255,.06)",border:"1px solid var(--border)",color:(ROOMS.find((r:any)=>r.id===s.room)||{color:"var(--muted2)"}).color}}>{roomLabelOf(s.room)}{s.rollNo?` · เลขที่ ${s.rollNo}`:""}</span></div>
             </div>
             <div style={{maxWidth:280}}><XPBar xp={sxp} showLabel={false}/></div>
           </div>
-          <div className="mono" style={{fontSize:20,color:hasError?"#ef4444":r.color}}>{sxp.toLocaleString()}</div>
-          <GradeTag xp={sxp}/>
-          {hasError&&<button className="btn-ghost" onClick={e=>{e.stopPropagation();recalcXp(s);}}
-            style={{fontSize:11,padding:"6px 12px",borderColor:"rgba(234,179,8,.4)",color:"#eab308",flexShrink:0}}>
-            🔄 แก้
-          </button>}
+          <div className="mono" style={{fontSize:20,color:r.color}}>{sxp.toLocaleString()}</div>
+          <GradeTag xp={sxp} override={s.gradeOverride}/>
           <div style={{color:"var(--muted)",cursor:"pointer"}} onClick={()=>setSel(s.id)}>›</div>
         </div>
       );})}
+      </>)}
     </div>
   );
 }
@@ -1846,6 +1919,8 @@ function TeacherAssignments({assignments,setAssignments,students,setStudents,ski
   const [checkModal,setCheckModal]=useState(null);
   const [editXp,setEditXp]=useState({});
   const [editMaxXp,setEditMaxXp]=useState(""); // XP เต็มของงานที่กำลังตรวจ
+  const [selRoomA,setSelRoomA]=useState("all");
+  const filteredStudentsA=(selRoomA==="all"?students:students.filter((s:any)=>s.room===selRoomA)).slice().sort(rollCmp);
 
   function save(){
     if(!form.title.trim())return;
@@ -1935,8 +2010,8 @@ function TeacherAssignments({assignments,setAssignments,students,setStudents,ski
     if(refreshFromSheet)setTimeout(()=>{refreshFromSheet();},1500);
   }
 
-  const submitted=checkModal?students.filter(s=>s.submissions?.[checkModal.id]):[];
-  const notSubmitted=checkModal?students.filter(s=>!s.submissions?.[checkModal.id]):[];
+  const submitted=checkModal?filteredStudentsA.filter((s:any)=>s.submissions?.[checkModal.id]):[];
+  const notSubmitted=checkModal?filteredStudentsA.filter((s:any)=>!s.submissions?.[checkModal.id]):[];
 
   return(
     <div className="fade-up" style={{padding:20,maxWidth:900,margin:"0 auto"}}>
@@ -2107,6 +2182,7 @@ function TeacherAssignments({assignments,setAssignments,students,setStudents,ski
         <button className="btn btn-gold" onClick={()=>setModal(true)} style={{fontSize:16,padding:"12px 28px"}}>➕ เพิ่มงานใหม่</button>
       </div>
 
+      <RoomFilter value={selRoomA} onChange={setSelRoomA}/>
       {CHAPTERS.map(ch=>{
         const chA=assignments.filter(a=>a.chapterId===ch.id);
         return(
@@ -2119,7 +2195,7 @@ function TeacherAssignments({assignments,setAssignments,students,setStudents,ski
             {chA.length===0&&<div style={{color:"var(--muted)",fontSize:13,padding:"8px 0"}}>ยังไม่มีงาน</div>}
             {chA.map(a=>{
               const tm=TYPE_META[a.type]||{};
-              const submittedCount=students.filter(s=>s.submissions?.[a.id]).length;
+              const submittedCount=filteredStudentsA.filter((s:any)=>s.submissions?.[a.id]).length;
               return(
                 <div key={a.id} className="card" style={{display:"flex",alignItems:"center",gap:14,marginBottom:8,borderColor:`${ch.color}25`,flexWrap:"wrap"}}>
                   <div style={{fontSize:24,flexShrink:0}}>{tm.icon||"📄"}</div>
@@ -2128,8 +2204,8 @@ function TeacherAssignments({assignments,setAssignments,students,setStudents,ski
                     <div style={{fontSize:11,color:"var(--muted)",marginTop:2,whiteSpace:"nowrap"}}>(เต็ม {a.xp} XP / {xpToScore(a.xp)} คะแนน)</div>
                     <div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>{a.desc} · <span style={{whiteSpace:"nowrap"}}>{a.due}</span></div>
                     <div style={{display:"flex",gap:6,marginTop:6,flexWrap:"wrap"}}>
-                      <span className="badge" style={{background:"rgba(94,200,126,.12)",border:"1px solid rgba(94,200,126,.35)",color:"var(--green)"}}>✓ {submittedCount}/{students.length} คน</span>
-                      {submittedCount<students.length&&<span className="badge" style={{background:"rgba(232,96,96,.1)",border:"1px solid rgba(232,96,96,.25)",color:"var(--red)"}}>⏳ ค้าง {students.length-submittedCount}</span>}
+                      <span className="badge" style={{background:"rgba(94,200,126,.12)",border:"1px solid rgba(94,200,126,.35)",color:"var(--green)"}}>✓ {submittedCount}/{filteredStudentsA.length} คน</span>
+                      {submittedCount<filteredStudentsA.length&&<span className="badge" style={{background:"rgba(232,96,96,.1)",border:"1px solid rgba(232,96,96,.25)",color:"var(--red)"}}>⏳ ค้าง {filteredStudentsA.length-submittedCount}</span>}
                       <button onClick={()=>setPhase(a.id,(a.phase||"before")==="before"?"after":"before")}
                         className="badge" style={{cursor:"pointer",border:"none",whiteSpace:"nowrap",
                           background:(a.phase||"before")==="before"?"rgba(167,139,250,.15)":"rgba(244,114,182,.15)",
@@ -2330,8 +2406,12 @@ function TeacherScores({students,setStudents,assignments,studentsLoadOk}){
   // เช็คว่านักเรียนคนนี้เคยได้รับ "กิจกรรมที่กำลังตั้งค่าอยู่ตอนนี้" ไปแล้วหรือยัง (สำหรับงานกลุ่ม บันทึกได้หลายรอบ)
   function alreadyGiven(s:any){return activityName.trim()&&(s.xpLog||[]).some((l:any)=>l.activity===activityName.trim());}
   function givenEntry(s:any){return (s.xpLog||[]).find((l:any)=>l.activity===activityName.trim());}
-  const notGivenList=students.filter((s:any)=>!alreadyGiven(s));
-  const givenList=students.filter((s:any)=>alreadyGiven(s));
+  const [selRoomFilter,setSelRoomFilter]=useState("all");
+  const filteredStudents=(selRoomFilter==="all"?students:students.filter((s:any)=>s.room===selRoomFilter)).slice().sort(rollCmp);
+  // สลับห้อง → ล้างรายชื่อที่ติ๊กไว้ของห้องเดิม (กันบันทึกกลุ่มที่มีคนจากอีกห้องปนอยู่โดยมองไม่เห็น)
+  useEffect(()=>{setSelected({});setPerStuXp({});setBulkFillValue("");},[selRoomFilter]);
+  const notGivenList=filteredStudents.filter((s:any)=>!alreadyGiven(s));
+  const givenList=filteredStudents.filter((s:any)=>alreadyGiven(s));
   function toggleSelect(id:string){setSelected((p:any)=>({...p,[id]:!p[id]}));}
   function selectedIds(){return Object.keys(selected).filter(id=>selected[id]);}
   function applyBulkFill(){
@@ -2401,7 +2481,7 @@ function TeacherScores({students,setStudents,assignments,studentsLoadOk}){
     if(!studentsLoadOk){alert("⚠️ ยังโหลดข้อมูลนักเรียนจริงจากระบบไม่สำเร็จ กรุณารีเฟรชหน้าเว็บใหม่ก่อนแก้ไข (เพื่อป้องกันข้อมูลเสียหาย)");return;}
     if(!maxXpAmt||Number(maxXpAmt)<=0){toast("กรุณาใส่ XP เต็มของกิจกรรมนี้",true);return;}
     if(!activityName.trim()){toast("กรุณาใส่ชื่องาน/กิจกรรม",true);return;}
-    const ids=selectedIds().filter(id=>!alreadyGiven(students.find((s:any)=>s.id===id)));
+    const ids=selectedIds().filter(id=>!alreadyGiven(filteredStudents.find((s:any)=>s.id===id)));
     if(ids.length===0){toast("กรุณาเลือกนักเรียนอย่างน้อย 1 คน",true);return;}
     // ต้องกรอกคะแนนให้ครบทุกคนที่เลือกก่อนบันทึก
     const missing=ids.some(id=>perStuXp[id]===undefined||perStuXp[id]===""||isNaN(Number(perStuXp[id])));
@@ -2442,6 +2522,7 @@ function TeacherScores({students,setStudents,assignments,studentsLoadOk}){
   return(
     <div className="fade-up" style={{padding:20,maxWidth:960,margin:"0 auto"}}>
       <div className="mono" style={{fontSize:10,color:"var(--muted)",letterSpacing:3,marginBottom:16}}>XP MANAGEMENT</div>
+      <RoomFilter value={selRoomFilter} onChange={setSelRoomFilter}/>
       <div style={{display:"flex",borderBottom:"1px solid var(--border)",marginBottom:20}}>
         <button style={tabStyle("add")} onClick={()=>setTab("add")}>⭐ เพิ่ม XP</button>
         <button style={tabStyle("summary")} onClick={()=>setTab("summary")}>📊 สรุปรายงาน</button>
@@ -2493,7 +2574,7 @@ function TeacherScores({students,setStudents,assignments,studentsLoadOk}){
             {activityName.trim()&&givenList.length>0&&(
               <div style={{background:"rgba(94,200,126,.08)",border:"1px solid rgba(94,200,126,.3)",borderRadius:8,
                 padding:"10px 14px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:6}}>
-                <span style={{fontSize:12,color:"var(--green)"}}>✓ ให้ไปแล้ว {givenList.length} จาก {students.length} คน</span>
+                <span style={{fontSize:12,color:"var(--green)"}}>✓ ให้ไปแล้ว {givenList.length} จาก {filteredStudents.length} คน</span>
                 <span style={{fontSize:11,color:"var(--muted)"}}>เหลืออีก {notGivenList.length} คน</span>
               </div>
             )}
@@ -2575,14 +2656,14 @@ function TeacherScores({students,setStudents,assignments,studentsLoadOk}){
 
           <div className="card">
             <div className="mono" style={{fontSize:10,color:"var(--muted)",letterSpacing:2,marginBottom:14}}>XP ทุกนักเรียน</div>
-            {[...students].sort((a,b)=>getEffectiveXP(b,assignments)-getEffectiveXP(a,assignments)).map((s,i)=>{const sxp=getEffectiveXP(s,assignments);const r=getRank(sxp);return(
+            {[...filteredStudents].sort((a:any,b:any)=>getEffectiveXP(b,assignments)-getEffectiveXP(a,assignments)).map((s:any,i:number)=>{const sxp=getEffectiveXP(s,assignments);const r=getRank(sxp);return(
               <div key={s.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid var(--border)"}}>
                 <span style={{width:28,textAlign:"center",fontSize:14,color:"var(--muted)"}}>{i+1}</span>
                 <span style={{fontSize:28}}>{s.avatar}</span>
                 <span style={{flex:1,fontSize:14}}>{s.name}</span>
                 <div style={{width:110}}><XPBar xp={sxp} showLabel={false}/></div>
                 <div className="mono" style={{width:70,textAlign:"right",color:r.color}}>{sxp.toLocaleString()}</div>
-                <GradeTag xp={sxp}/>
+                <GradeTag xp={sxp} override={s.gradeOverride}/>
               </div>
             );})}
           </div>
@@ -2630,7 +2711,7 @@ function TeacherScores({students,setStudents,assignments,studentsLoadOk}){
               <input className="input" value={editAct.newName} onChange={e=>setEditAct({...editAct,newName:e.target.value})}
                 placeholder="ชื่อกิจกรรม"/>
             </div>
-            <div style={{marginBottom:20}}>
+            <div style={{marginBottom:14}}>
               <label className="mono" style={{fontSize:10,color:"var(--muted)",letterSpacing:2,display:"block",marginBottom:8}}>คะแนนเต็ม</label>
               <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:8}}>
                 <input className="input" type="number" min="1"
@@ -2678,9 +2759,10 @@ function TeacherScores({students,setStudents,assignments,studentsLoadOk}){
             </div>
           ):(
             allActivities.map((act:any,ai)=>{
-              const sortedStudents=[...students].sort((a:any,b:any)=>Number(a.password||0)-Number(b.password||0));
-              const totalGiven=Object.values(act.entries).reduce((s:number,e:any)=>s+(e.xp||0),0);
-              const receivedCount=Object.keys(act.entries).length;
+              const sortedStudents=[...filteredStudents];
+              const roomIds=new Set(filteredStudents.map((x:any)=>x.id));
+              const totalGiven=Object.entries(act.entries).filter(([id])=>roomIds.has(id)).reduce((s:number,[,e]:any)=>s+(e.xp||0),0);
+              const receivedCount=Object.keys(act.entries).filter(id=>roomIds.has(id)).length;
               return(
                 <div key={ai} className="card" style={{marginBottom:16,borderColor:"rgba(232,188,85,.35)"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14,flexWrap:"wrap",gap:8}}>
@@ -2688,7 +2770,7 @@ function TeacherScores({students,setStudents,assignments,studentsLoadOk}){
                       <div className="cond" style={{fontSize:20,fontWeight:700,color:"var(--gold2)"}}>{act.name}</div>
                       <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap",alignItems:"center"}}>
                         <span className="badge" style={{background:"rgba(94,200,126,.14)",border:"1px solid rgba(94,200,126,.4)",color:"var(--green)"}}>✓ ได้รับ {receivedCount} คน</span>
-                        <span className="badge" style={{background:"rgba(232,96,96,.1)",border:"1px solid rgba(232,96,96,.28)",color:"var(--red)"}}>— ยังไม่ได้ {students.length-receivedCount} คน</span>
+                        <span className="badge" style={{background:"rgba(232,96,96,.1)",border:"1px solid rgba(232,96,96,.28)",color:"var(--red)"}}>— ยังไม่ได้ {filteredStudents.length-receivedCount} คน</span>
                         <span className="badge" style={{background:act.phase==="after"?"rgba(244,114,182,.14)":"rgba(167,139,250,.14)",border:`1px solid ${act.phase==="after"?"rgba(244,114,182,.4)":"rgba(167,139,250,.4)"}`,color:act.phase==="after"?"#f472b6":"#a78bfa"}}>{act.phase==="after"?"🔵 หลังกลางภาค":"🟣 ก่อนกลางภาค"}</span>
                         <span className="mono" style={{fontSize:11,color:"var(--gold)",padding:"3px 8px"}}>รวม {totalGiven.toLocaleString()} XP ({xpToScore(totalGiven)} คะแนน)</span>
                         <span className="mono" style={{fontSize:11,color:"var(--muted)",padding:"3px 8px"}}>เต็มคนละ {act.maxXp.toLocaleString()} XP ({xpToScore(act.maxXp)} คะแนน)</span>
@@ -2749,7 +2831,9 @@ function TeacherGrades({students,setStudents,assignments,studentsLoadOk,initSubj
   // ─── ข้อมูลหัวกระดาษรายงานทางการ (ไม่ได้เก็บในระบบ ให้ครูกรอกเองก่อนพิมพ์แต่ละครั้ง) ───
   const [rptSchool,setRptSchool]=useState(initSchool||SETTINGS.school||"โรงเรียน..............................................");
   const [rptSubject,setRptSubject]=useState(initSubject||(SETTINGS.subject?`รายวิชา ${SETTINGS.subject}  รหัสวิชา....................`:"รายวิชา.......................................... รหัสวิชา...................."));
-  const [rptClass,setRptClass]=useState("ชั้น..........................");
+  const [rptClass,setRptClass]=useState("ชั้นมัธยมศึกษาปีที่ 5");
+  const [selRoomG,setSelRoomG]=useState("all");
+  const filteredG=(selRoomG==="all"?students:students.filter((s:any)=>s.room===selRoomG)).slice().sort(rollCmp);
   const [rptTerm,setRptTerm]=useState(initTerm||"ภาคเรียนที่ .......... ปีการศึกษา ..........");
   // คะแนน pre/post-test เก็บตรงในตัวนักเรียนแต่ละคน (student.pretest/posttest) แล้วบันทึกทันทีที่แก้
   // เพื่อให้รอดจากการสลับแท็บ/รีเฟรชหน้า เหมือนข้อมูลอื่นๆ ในระบบ (ไม่ใช่ state ชั่วคราวเหมือนเดิม)
@@ -2788,6 +2872,15 @@ function TeacherGrades({students,setStudents,assignments,studentsLoadOk,initSubj
     if(total>=65)return"2.5";if(total>=60)return"2.0";if(total>=55)return"1.5";
     if(total>=50)return"1.0";return"0";
   }
+  // เกรดทางการ (100 เต็ม) ที่ "ใช้จริง" — ถ้าครูตั้งเกรดเอง (ร/มส/0-4) ใช้ค่านั้นเสมอ ไม่งั้นคำนวณจากคะแนนตามปกติ
+  function normalizeOverrideOfficial(g:string){
+    if(g==="ร"||g==="มส")return g;
+    const n=parseFloat(g);return n===0?"0":n.toFixed(1);
+  }
+  function finalGradeOfficial(student:any){
+    if(student?.gradeOverride)return normalizeOverrideOfficial(student.gradeOverride);
+    return getGrade(getTotal(student));
+  }
   function gradeColor(g:string|null){
     if(!g)return"var(--muted)";
     const n=parseFloat(g);
@@ -2809,56 +2902,59 @@ function TeacherGrades({students,setStudents,assignments,studentsLoadOk,initSubj
     setSaved(true);setTimeout(()=>setSaved(false),3000);
   }
 
-  const sorted=[...students].sort((a:any,b:any)=>(getTotal(b)??-1)-(getTotal(a)??-1));
-  const withGrades=students.filter((s:any)=>getTotal(s)!==null);
-  const passing=withGrades.filter((s:any)=>parseFloat(getGrade(getTotal(s))||"0")>0).length;
+  const sorted=[...filteredG].sort((a:any,b:any)=>(getTotal(b)??-1)-(getTotal(a)??-1));
+  const withGrades=filteredG.filter((s:any)=>getTotal(s)!==null);
+  const withFinalGrade=students.filter((s:any)=>finalGradeOfficial(s)!=null);
+  const passing=withFinalGrade.filter((s:any)=>!isFailGrade(finalGradeOfficial(s))).length;
   const avg=withGrades.length>0?Math.round(withGrades.reduce((a:number,s:any)=>a+(getTotal(s)||0),0)/withGrades.length):null;
-  const gradeCounts:any={"4.0":0,"3.5":0,"3.0":0,"2.5":0,"2.0":0,"1.5":0,"1.0":0,"0":0};
-  students.forEach((s:any)=>{const g=getGrade(getTotal(s));if(g)gradeCounts[g]++;});
+  const gradeCountsOrderOfficial=["ร","มส","0","1.0","1.5","2.0","2.5","3.0","3.5","4.0"];
+  const gradeCounts:any={};gradeCountsOrderOfficial.forEach(g=>gradeCounts[g]=0);
+  students.forEach((s:any)=>{const g=finalGradeOfficial(s);if(g)gradeCounts[g]++;});
 
   useEffect(()=>{
     if(typeof Chart==="undefined")return;
-    ["gradeDistChart","scoreBreakChart","ppGroupBar"].forEach(id=>{
+    ["gradeDistChart","gradeBarChart","ppGroupBar"].forEach(id=>{
       const c=document.getElementById(id) as HTMLCanvasElement;
       if(c&&(c as any)._ci){(c as any)._ci.destroy();(c as any)._ci=null;}
     });
     if(tabG==="score"){
       Chart.defaults.color="#9aacbf";
+      const gradedTotal=withFinalGrade.length;
       const gc=document.getElementById("gradeDistChart") as HTMLCanvasElement;
       if(gc){
-        const gLabels=Object.keys(gradeCounts);
-        const gColors=gLabels.map(g=>{const n=parseFloat(g);return n>=3.5?"#4ecaae":n>=2.5?"#f5cc70":n>=1.5?"#e88c4a":"#e86060";});
+        const gLabels=gradeCountsOrderOfficial;
+        const gColors=gLabels.map(g=>{if(g==="ร")return"#eab308";if(g==="มส")return"#dc2626";const n=parseFloat(g);return n>=3.5?"#4ecaae":n>=2.5?"#f5cc70":n>=1.5?"#e88c4a":"#e86060";});
+        const gData=gLabels.map(g=>gradeCounts[g]);
         (gc as any)._ci=new Chart(gc,{
           type:"doughnut",
-          data:{labels:gLabels,datasets:[{data:Object.values(gradeCounts),backgroundColor:gColors,borderWidth:3,borderColor:"rgba(15,30,53,.9)"}]},
+          data:{labels:gLabels,datasets:[{data:gData,backgroundColor:gColors,borderWidth:3,borderColor:"rgba(15,30,53,.9)"}]},
           options:{responsive:true,maintainAspectRatio:false,
             plugins:{
               legend:{display:true,position:"bottom" as const,labels:{color:"#9aacbf",font:{size:10},padding:8,boxWidth:10}},
-              tooltip:{callbacks:{label:(c:any)=>c.label+": "+c.raw+" คน ("+(Math.round(c.raw/students.length*100))+"%)"}},
+              tooltip:{callbacks:{label:(c:any)=>c.label+": "+c.raw+" คน ("+(gradedTotal?Math.round(c.raw/gradedTotal*1000)/10:0)+"%)"}},
               datalabels:{color:"#fff",font:{weight:"bold" as const,size:11},
-                formatter:(val:any)=>val>0?(val+" คน "+(Math.round(val/students.length*100))+"%"):"" ,
+                formatter:(val:any)=>val>0?(val+" คน ("+(gradedTotal?Math.round(val/gradedTotal*1000)/10:0)+"%)"):"" ,
                 display:(ctx:any)=>ctx.dataset.data[ctx.dataIndex]>0}
             }
           }
         });
       }
-      const sc=document.getElementById("scoreBreakChart") as HTMLCanvasElement;
-      if(sc){
-        const top8=sorted.slice(0,8);
-        (sc as any)._ci=new Chart(sc,{
+      const bc=document.getElementById("gradeBarChart") as HTMLCanvasElement;
+      if(bc){
+        const gLabels=gradeCountsOrderOfficial;
+        const gColors=gLabels.map(g=>{if(g==="ร")return"#eab308";if(g==="มส")return"#dc2626";const n=parseFloat(g);return n>=3.5?"#4ecaae":n>=2.5?"#f5cc70":n>=1.5?"#e88c4a":"#e86060";});
+        const gData=gLabels.map(g=>gradeCounts[g]);
+        (bc as any)._ci=new Chart(bc,{
           type:"bar",
-          data:{
-            labels:top8.map((s:any)=>s.name.split(" ").slice(-1)[0]),
-            datasets:[
-              {label:"เก็บก่อนกลาง",data:top8.map((s:any)=>getS1(s)),backgroundColor:"#185FA5",borderRadius:2,stack:"a"},
-              {label:"กลางภาค",data:top8.map((s:any)=>s.midterm||0),backgroundColor:"#5DCAA5",borderRadius:2,stack:"a"},
-              {label:"เก็บหลังกลาง",data:top8.map((s:any)=>getS2(s)),backgroundColor:"#f472b6",borderRadius:2,stack:"a"},
-              {label:"ปลายภาค",data:top8.map((s:any)=>s.final||0),backgroundColor:"#e88c4a",borderRadius:2,stack:"a"},
-            ]
-          },
+          data:{labels:gLabels,datasets:[{label:"จำนวน",data:gData,backgroundColor:gColors,borderRadius:6}]},
           options:{responsive:true,maintainAspectRatio:false,
-            plugins:{legend:{display:false},datalabels:{display:false}},
-            scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,max:100,grid:{color:"rgba(232,188,85,.08)"}}}}
+            plugins:{legend:{display:false},
+              tooltip:{callbacks:{label:(c:any)=>c.raw+" คน ("+(gradedTotal?Math.round(c.raw/gradedTotal*1000)/10:0)+"%)"}},
+              datalabels:{color:"#fff",font:{weight:"bold" as const,size:10},anchor:"end" as const,align:"top" as const,
+                formatter:(val:any)=>val+" คน\n("+(gradedTotal?Math.round(val/gradedTotal*1000)/10:0)+"%)"}
+            },
+            scales:{y:{beginAtZero:true,ticks:{stepSize:1},grid:{color:"rgba(232,188,85,.08)"}},x:{grid:{display:false}}}
+          }
         });
       }
     }
@@ -2925,13 +3021,13 @@ function TeacherGrades({students,setStudents,assignments,studentsLoadOk,initSubj
   // ─── สร้างคอลัมน์รายการ (ใบงาน + กิจกรรม) แยกตามช่วงก่อน/หลังกลางภาค สำหรับรายงานทางการ ───
   function buildPhaseItems(phase:string){
     const phaseAssign=(assignments||[]).filter((a:any)=>(a.phase||"before")===phase);
-    const actNames:string[]=[...new Set((students||[]).flatMap((s:any)=>(s.xpLog||[]).filter((l:any)=>(l.phase||"before")===phase).map((l:any)=>l.activity)))];
+    const actNames:string[]=[...new Set((filteredG||[]).flatMap((s:any)=>(s.xpLog||[]).filter((l:any)=>(l.phase||"before")===phase).map((l:any)=>l.activity)))];
     const assignItems=phaseAssign.map((a:any)=>({
       key:"a_"+a.id,name:a.title,max:xpToScore(a.xp,9999),
       score:(s:any)=>{const sub=s.submissions?.[a.id];return sub?.graded?xpToScore(sub.xpEarned,9999):0;}
     }));
     const actItems=actNames.map((name:any)=>{
-      const maxXpVal=Math.max(0,...(students||[]).flatMap((s:any)=>(s.xpLog||[]).filter((l:any)=>l.activity===name).map((l:any)=>l.maxXp||l.xp||0)));
+      const maxXpVal=Math.max(0,...(filteredG||[]).flatMap((s:any)=>(s.xpLog||[]).filter((l:any)=>l.activity===name).map((l:any)=>l.maxXp||l.xp||0)));
       return{
         key:"act_"+name,name,max:xpToScore(maxXpVal,9999),
         score:(s:any)=>{const log=(s.xpLog||[]).find((l:any)=>l.activity===name);return log?xpToScore(log.xp,9999):0;}
@@ -3004,8 +3100,46 @@ function TeacherGrades({students,setStudents,assignments,studentsLoadOk,initSubj
   const rMid=(s:any)=>s.midterm??0;
   const rFinal=(s:any)=>s.final??0;
   const rGrand=(s:any)=>rBefore(s)+rMid(s)+rAfter(s)+rFinal(s);
-  const rGradeOf=(s:any)=>getGrade(rGrand(s));
-  const reportStudents=[...students].sort((a:any,b:any)=>Number(a.password||0)-Number(b.password||0));
+  const rGradeOf=(s:any)=>s.gradeOverride?normalizeOverrideOfficial(s.gradeOverride):getGrade(rGrand(s));
+  // เรียงตามเลขที่ (ไม่ใช่เลขประจำตัวเหมือนเดิม)
+  // เรียงตามห้อง → เลขที่ (ไม่ใช่เลขประจำตัว)
+  const reportStudents=[...filteredG];
+  // ─── ส่งออกรายงานเป็นไฟล์ Excel (.xlsx) — เปิดได้ตรงใน Google Sheets เลย (อัปโหลดขึ้น Drive แล้วเปิดด้วย Google Sheets หรือ File > Import) โหลดไลบรารีจาก CDN ตอนกดใช้เท่านั้น ───
+  function loadXLSX(){
+    return new Promise<any>((resolve,reject)=>{
+      if((window as any).XLSX){resolve((window as any).XLSX);return;}
+      const script=document.createElement("script");
+      script.src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+      script.onload=()=>resolve((window as any).XLSX);
+      script.onerror=()=>reject(new Error("โหลดไลบรารี Excel ไม่สำเร็จ ลองเช็คอินเทอร์เน็ตแล้วลองใหม่"));
+      document.head.appendChild(script);
+    });
+  }
+  async function exportXLSX(){
+    let XLSXLib:any;
+    try{ XLSXLib=await loadXLSX(); }
+    catch(e){ alert("โหลดไลบรารี Excel ไม่สำเร็จ — เช็คอินเทอร์เน็ตแล้วลองอีกครั้ง"); return; }
+    const headerRow=[
+      "เลขที่","เลขประจำตัว","ชื่อ-สกุล",
+      ...beforeShown.map((it:any)=>`${it.name} (${it.max})`),
+      "รวมก่อนกลางภาค (35)","สอบกลางภาค (15)",
+      ...afterShown.map((it:any)=>`${it.name} (${it.max})`),
+      "รวมหลังกลางภาค (35)","สอบปลายภาค (15)","รวม (100)","เกรด",
+    ];
+    const rows=reportStudents.map((s:any,i:number)=>[
+      s.rollNo??"",s.password,s.name,
+      ...beforeShown.map((it:any)=>it.score(s)),
+      rBefore(s),s.midterm??"",
+      ...afterShown.map((it:any)=>it.score(s)),
+      rAfter(s),s.final??"",rGrand(s),rGradeOf(s)??"",
+    ]);
+    const ws=XLSXLib.utils.aoa_to_sheet([[`${rptSchool} — ${rptSubject}`],[`${rptClass}  ${rptTerm}`],[],headerRow,...rows]);
+    ws["!cols"]=headerRow.map((h:string,idx:number)=>({wch:idx===2?24:Math.max(10,h.length+2)}));
+    const wb=XLSXLib.utils.book_new();
+    XLSXLib.utils.book_append_sheet(wb,ws,"รายงานคะแนน");
+    const stamp=new Date().toLocaleDateString("th-TH",{day:"2-digit",month:"2-digit",year:"numeric"}).replace(/\//g,"-");
+    XLSXLib.writeFile(wb,`รายงานคะแนน-${stamp}.xlsx`);
+  }
   const rptTh:React.CSSProperties={border:"1px solid #000",padding:"4px 6px",fontSize:16,fontWeight:700,textAlign:"center",background:"#f0f0f0",wordBreak:"normal",overflowWrap:"normal"};
   const rptTd:React.CSSProperties={border:"1px solid #000",padding:"4px 6px",fontSize:16,textAlign:"center",wordBreak:"normal",overflowWrap:"normal"};
   // ชื่อรายการใบงาน/กิจกรรมอาจยาว ลดขนาดเหลือ 14 ได้ถ้าตัวใหญ่ไม่พอ แต่ยังต้องตัดคำถูกหลักภาษาไทย (ไม่ตัดกลางคำมั่ว)
@@ -3081,6 +3215,7 @@ function TeacherGrades({students,setStudents,assignments,studentsLoadOk,initSubj
         <button style={tabStyleG("prepost")} onClick={()=>setTabG("prepost")}>👥 Pre/Post-test</button>
         <button style={tabStyleG("report")} onClick={()=>setTabG("report")}>📄 รายงานทางการ</button>
       </div>
+      <RoomFilter value={selRoomG} onChange={setSelRoomG}/>
 
       {tabG==="score"&&(
         <div>
@@ -3089,7 +3224,7 @@ function TeacherGrades({students,setStudents,assignments,studentsLoadOk,initSubj
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:12,marginBottom:20}}>
             {[{icon:"👥",label:"นักเรียน",val:students.length,c:"var(--cyan)"},
               {icon:"✅",label:"ผ่านเกณฑ์",val:passing,c:"var(--green)"},
-              {icon:"❌",label:"ไม่ผ่าน",val:withGrades.length-passing,c:"var(--red)"},
+              {icon:"❌",label:"ไม่ผ่าน",val:withFinalGrade.length-passing,c:"var(--red)"},
               {icon:"📊",label:"คะแนนเฉลี่ย",val:avg!==null?avg+"":"รอกรอก",c:"var(--gold)"},
             ].map((s,i)=>(
               <div key={i} className="card" style={{textAlign:"center"}}>
@@ -3114,7 +3249,7 @@ function TeacherGrades({students,setStudents,assignments,studentsLoadOk,initSubj
               </thead>
               <tbody>
                 {sorted.map((s:any)=>{
-                  const s1=getS1(s),s2=getS2(s),total=getTotal(s),grade=getGrade(total);
+                  const s1=getS1(s),s2=getS2(s),total=getTotal(s),grade=finalGradeOfficial(s);
                   return(
                     <tr key={s.id} style={{borderBottom:"1px solid var(--border)"}}>
                       <td style={{padding:"10px 12px",fontSize:13,textAlign:"left"}}>
@@ -3150,21 +3285,38 @@ function TeacherGrades({students,setStudents,assignments,studentsLoadOk,initSubj
               </tbody>
             </table>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-            <div className="card">
-              <div className="cond" style={{fontSize:16,color:"var(--gold)",marginBottom:12}}>กราฟสรุปเกรด</div>
-              <div style={{position:"relative",height:220}}><canvas id="gradeDistChart"/></div>
+          {withFinalGrade.length===0?(
+            <div className="card" style={{textAlign:"center",padding:36}}>
+              <div style={{fontSize:32,marginBottom:10}}>📊</div>
+              <div className="cond" style={{fontSize:18,color:"var(--muted2)",fontWeight:700}}>ยังไม่มีใครมีเกรดสรุปครบ</div>
+              <div style={{fontSize:12,color:"var(--muted)",marginTop:6}}>ต้องกรอกคะแนนสอบกลางภาคและปลายภาคให้ครบก่อน กราฟจะขึ้นเองอัตโนมัติ</div>
             </div>
-            <div className="card">
-              <div className="cond" style={{fontSize:16,color:"var(--gold)",marginBottom:8}}>คะแนนรายส่วน (8 อันดับแรก)</div>
-              <div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:10,marginBottom:8}}>
-                {[["#185FA5","เก็บก่อนกลาง"],["#5DCAA5","กลางภาค"],["#f472b6","เก็บหลังกลาง"],["#e88c4a","ปลายภาค"]].map(([c,l])=>(
-                  <span key={l}><span style={{display:"inline-block",width:8,height:8,borderRadius:2,background:c,marginRight:3}}></span>{l}</span>
-                ))}
+          ):(<>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12,marginBottom:16}}>
+              {[
+                {icon:"👥",label:"มีเกรดแล้ว",val:withFinalGrade.length,c:"var(--cyan)"},
+                {icon:"✅",label:`ผ่านเกณฑ์ (${Math.round(passing/withFinalGrade.length*1000)/10}%)`,val:passing,c:"var(--green)"},
+                {icon:"❌",label:`ไม่ผ่าน (${Math.round((withFinalGrade.length-passing)/withFinalGrade.length*1000)/10}%)`,val:withFinalGrade.length-passing,c:"var(--red)"},
+                {icon:"📊",label:"คะแนนเฉลี่ย",val:avg!==null?avg+"":"รอกรอก",c:"var(--gold)"},
+              ].map((st,i)=>(
+                <div key={i} className="card" style={{textAlign:"center"}}>
+                  <div style={{fontSize:20,marginBottom:4}}>{st.icon}</div>
+                  <div className="cond" style={{fontSize:typeof st.val==="number"?28:16,fontWeight:900,color:st.c}}>{st.val}</div>
+                  <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>{st.label}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+              <div className="card">
+                <div className="cond" style={{fontSize:16,color:"var(--gold)",marginBottom:12}}>จำนวนนักเรียนต่อเกรด</div>
+                <div style={{position:"relative",height:220}}><canvas id="gradeBarChart"/></div>
               </div>
-              <div style={{position:"relative",height:200}}><canvas id="scoreBreakChart"/></div>
+              <div className="card">
+                <div className="cond" style={{fontSize:16,color:"var(--gold)",marginBottom:12}}>กราฟสรุปเกรด</div>
+                <div style={{position:"relative",height:220}}><canvas id="gradeDistChart"/></div>
+              </div>
             </div>
-          </div>
+          </>)}
         </div>
       )}
 
@@ -3215,7 +3367,7 @@ function TeacherGrades({students,setStudents,assignments,studentsLoadOk,initSubj
                 </tr>
               </thead>
               <tbody>
-                {students.map((st:any)=>{
+                {filteredG.map((st:any)=>{
                   const pp=getPP(st);
                   const pg=pp.pre!==null?getPPGroup(pp.pre):null;
                   const qg=pp.post!==null?getPPGroup(pp.post):null;
@@ -3398,24 +3550,24 @@ function TeacherGrades({students,setStudents,assignments,studentsLoadOk,initSubj
               </div>
             </div>
             <div style={{fontSize:11,color:"var(--muted)",marginTop:10}}>💡 ติ๊กออกเพื่อซ่อนคอลัมน์นั้นจากรายงาน (ยอดรวม/เกรดยังคำนวณจากทุกรายการเหมือนเดิม ไม่กระทบคะแนนจริง) กด ▲▼ เพื่อสลับลำดับ · คอลัมน์ที่เพิ่มเอง แก้ชื่อ/คะแนนเต็ม/กรอกคะแนนได้ตรงนี้เลย (คะแนนนี้ใช้เฉพาะรายงาน ไม่กระทบ XP ในระบบ)</div>
+            <button className="btn-ghost" onClick={exportXLSX} style={{fontSize:13,padding:"9px 20px",marginTop:12,marginLeft:10,borderColor:"rgba(94,200,126,.5)",color:"var(--green)"}}>📗 ดาวน์โหลดเป็น Excel / Google Sheets (.xlsx)</button>
             <button className="btn-ghost" onClick={exportPPTX} style={{fontSize:13,padding:"9px 20px",marginTop:12,borderColor:"rgba(232,140,74,.5)",color:"var(--orange)"}}>📊 ดาวน์โหลดเป็น PowerPoint (แก้ไขได้)</button>
           </div>
 
           <div id="print-report-area" lang="th" style={{background:"#fff",color:"#000",padding:24,borderRadius:8,overflowX:"auto",fontFamily:"'TH Sarabun PSK',sans-serif",wordBreak:"normal",overflowWrap:"normal",lineBreak:"strict"}}>
             <div style={{textAlign:"center",marginBottom:4,fontSize:18,fontWeight:700}}>{rptSchool}</div>
-            <div style={{display:"flex",justifyContent:"space-between",fontSize:16,marginBottom:2}}>
-              <span>คะแนนนักเรียน{rptClass}</span><span>{rptTerm}</span>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:18,marginBottom:2}}>
+              <span>คะแนนนักเรียน{rptClass}{selRoomG==="all"?"":` (${roomLabelOf(selRoomG)})`}</span><span>{rptTerm}</span>
             </div>
-            <div style={{textAlign:"left",fontSize:16,marginBottom:14}}>{rptSubject}</div>
+            <div style={{textAlign:"left",fontSize:18,marginBottom:14}}>{rptSubject}</div>
             <table style={{borderCollapse:"collapse",width:"100%",fontSize:16}}>
               <thead>
                 <tr>
-                  <th rowSpan={2} style={rptTh}>ลำดับ</th>
+                  <th rowSpan={2} style={rptTh}>เลขที่</th>
                   <th rowSpan={2} style={rptTh}>เลขประจำตัว</th>
                   <th rowSpan={2} style={{...rptTh,textAlign:"left",whiteSpace:"nowrap"}}>ชื่อ-สกุล</th>
                   <th colSpan={beforeShown.length+2} style={tint(rptTh,rptC.before)}>ก่อนกลางภาค (35)</th>
                   <th rowSpan={2} style={tint(rptTh,rptC.mid)}>สอบกลางภาค (15)</th>
-                  <th rowSpan={2} style={tint(rptTh,rptC.midTot)}>รวมกลางภาค (50)</th>
                   <th colSpan={afterShown.length+1} style={tint(rptTh,rptC.after)}>หลังกลางภาค (35)</th>
                   <th rowSpan={2} style={tint(rptTh,rptC.final)}>สอบปลายภาค (15)</th>
                   <th rowSpan={2} style={tint(rptTh,rptC.grand)}>รวม (100)</th>
@@ -3431,7 +3583,7 @@ function TeacherGrades({students,setStudents,assignments,studentsLoadOk,initSubj
               <tbody>
                 {reportStudents.map((s:any,i:number)=>(
                   <tr key={s.id}>
-                    <td style={rptTd}>{i+1}</td>
+                    <td style={rptTd}>{s.rollNo??"—"}</td>
                     <td style={rptTd}>{s.password}</td>
                     <td style={{...rptTd,textAlign:"left",whiteSpace:"nowrap"}}>{s.name}</td>
                     {beforeShown.map((it:any)=><td key={it.key} style={tint(rptTd,rptC.before)}>{it.score(s)}</td>)}
@@ -3676,14 +3828,14 @@ function TeacherAirdrop({students,setPendingAirdrop,setStudents,studentsLoadOk})
 // ─────────────────────────────────────────────
 // GOOGLE APPS SCRIPT API — แก้ไขแล้ว
 // ─────────────────────────────────────────────
-const GAS_URL = "https://script.google.com/macros/s/AKfycbwXtFzTVHNA-d5GZ7ebn9yk_a0DiPkOhHVseB1EakGnWsB3IiET2rBzm19aA8f7lQpR/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbxj5pX-hG9TXWzKunMHdwrkWu45byORy6yTsYoe8ishFq31YCL848supivUo9BpT1BA/exec";
 // ─────────────────────────────────────────────
 // ระบบหลายเทอม — แต่ละเทอมมีข้อมูลครบชุดของตัวเอง (นักเรียน/งาน/ไฟล์) ไม่ปะปนกัน
 // ใช้ร่วมกันทุกห้อง (ต่างกันแค่ ROOM_ID / ROOM_LABEL)
 // ─────────────────────────────────────────────
 // ROOM_ID ต้องตรงกับ ROOM_ID ใน Apps Script ของห้องเดียวกัน — ถ้าไม่ตรง เว็บจะหยุดและเตือนทันที (กันวางโค้ดผิดห้อง)
-const ROOM_ID="m5";
-const ROOM_LABEL="ม.5";
+const ROOM_ID="m5b";
+const ROOM_LABEL="ม.5/2–5/3";
 const TEACHER_PW="291241";
 // CUR_EPOCH = "รุ่น" ของการตั้งค่านักเรียนที่หน้าจอนี้โหลดมา — ทุกคำสั่งบันทึกของนักเรียนแนบไปด้วย
 // ถ้าครูเปลี่ยนเทอมที่นักเรียนเห็นไปแล้ว หน้าจอนักเรียนที่เปิดค้างไว้จะถูกปฏิเสธ ไม่สามารถเขียนข้อมูลผิดเทอมได้
@@ -3947,7 +4099,7 @@ function TermBar({termList,teacherTermId,studentTermId,onSwitch}:any){
   return(
     <div className="no-print" style={{margin:"0 20px 12px",padding:"9px 14px",borderRadius:8,display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",justifyContent:"space-between",fontSize:13,
       background:same?"rgba(94,200,126,.10)":"rgba(232,188,85,.14)",border:`1px solid ${same?"rgba(94,200,126,.4)":"rgba(232,188,85,.6)"}`}}>
-    <div>📚 กำลังทำงานในเทอม: <b>{(cur&&cur.label)||SETTINGS.termLabel}</b>{cur&&cur.subject?` · ${cur.subject}`:""}
+    <div>📚 ห้อง {ROOM_LABEL} · กำลังทำงานในเทอม: <b>{(cur&&cur.label)||SETTINGS.termLabel}</b>{cur&&cur.subject?` · ${cur.subject}`:""}
       <span style={{margin:"0 8px",opacity:.5}}>|</span>
       {same?<span style={{color:"var(--green)"}}>👩‍🎓 นักเรียนเห็นเทอมนี้อยู่</span>
         :<span style={{color:"#f5cc70"}}>⚠️ นักเรียนกำลังเห็น <b>{stu?stu.label:studentTermId}</b> (ไม่ใช่เทอมนี้ — สิ่งที่แก้ตรงนี้นักเรียนยังไม่เห็น)</span>}
@@ -4164,7 +4316,7 @@ async function syncStudentsToSheet(students,assignments){
       originalPassword:INIT_STUDENTS.find(x=>x.id===s.id)?.password||s.password,
       currentPassword:s.password,
       xp:s.xp,
-      grade:getRank(getEffectiveXP(s,assignments)).grade,
+      grade:finalGradeRank(s,assignments),
       rank:getRank(getEffectiveXP(s,assignments)).label,
       midterm:s.midterm,
       final:s.final,
@@ -4248,8 +4400,11 @@ export default function App(){
         if(Array.isArray(data.resources)){lastLoadedRef.current.resources=data.resources;setResources(data.resources);setResourcesLoadOk(true);}
         // ยืนยันว่าดึงมาสำเร็จจริงด้วย Array.isArray (ไม่ใช่แค่เช็ค length>0) — array ว่างเปล่าก็ถือว่า "ดึงสำเร็จ" เหมือนกัน
         if(Array.isArray(data.students)){
-          lastLoadedRef.current.students=data.students;
-          setStudents(data.students);setStudentsLoadOk(true);
+          // ระบบใหม่ที่ยังไม่เคยมีข้อมูลนักเรียนใน Sheet เลย → ใช้รายชื่อตั้งต้นในโค้ด แล้วให้ auto-save เขียนลง Sheet ครั้งแรก
+          const seedNow=!!data.studentsFresh&&data.students.length===0&&INIT_STUDENTS.length>0;
+          const stu=seedNow?INIT_STUDENTS:data.students;
+          if(!seedNow)lastLoadedRef.current.students=data.students;
+          setStudents(stu);setStudentsLoadOk(true);
           setDataLoadOk(true);setLoaded(true);
           return;
         }
@@ -4405,9 +4560,10 @@ export default function App(){
     }
     SESSION.term=termId;
     applyTermMeta(data.settings&&data.settings.termMeta);
-    lastLoadedRef.current={students:data.students,assignments:data.assignments,resources:data.resources};
+    const seedNow=!!data.studentsFresh&&data.students.length===0&&INIT_STUDENTS.length>0;
+    lastLoadedRef.current={students:seedNow?null:data.students,assignments:data.assignments,resources:data.resources};
     skipAutoSaveRef.current=false;
-    setStudents(data.students);setAssignments(data.assignments);setResources(data.resources);
+    setStudents(seedNow?INIT_STUDENTS:data.students);setAssignments(data.assignments);setResources(data.resources);
     setStudentsLoadOk(true);setAssignmentsLoadOk(true);setResourcesLoadOk(true);setDataLoadOk(true);setLoaded(true);
     if(data.settings){
       if(Array.isArray(data.settings.terms))setTermList(data.settings.terms);
