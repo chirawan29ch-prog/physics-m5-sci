@@ -244,7 +244,7 @@ function playAirdropSound(){
 // ─────────────────────────────────────────────
 // PHYSICS BACKGROUND — ภาพจริง + อนุภาคสไตล์ฟิสิกส์
 // ─────────────────────────────────────────────
-const PHYSICS_IMG_DAY = "https://i.postimg.cc/RVGwSXJh/a8d4de59513d2b1ca0a346c0c7fd039c.jpg";
+const PHYSICS_IMG_DAY = "https://soulout-studio.neocities.org/images/Mzt6T7c.jpg";   // ภาพหน้า login
 const PHYSICS_IMG_NIGHT = "https://i.postimg.cc/13kXsqB0/wp13416836.png";
 const PHYSICS_FORMULAS = ["E=mc\u00b2","F=ma","\u03bb=h/p","v=f\u03bb","p=mv","\u0394E=hf","a=\u0394v/\u0394t"];
 
